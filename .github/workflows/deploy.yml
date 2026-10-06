@@ -11,6 +11,7 @@ concurrency:
 jobs:
   deploy:
     if: github.ref == 'refs/heads/main'
+    environment: CLOUDFARE
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -24,8 +25,8 @@ jobs:
       - name: Deploy to Cloudflare
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "Cloudflare deploy skipped: add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets."
-            exit 0
+            echo "::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as secrets in the CLOUDFARE GitHub environment."
+            exit 1
           fi
           npm run deploy
         env:
