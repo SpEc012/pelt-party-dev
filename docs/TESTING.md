@@ -3,13 +3,13 @@
 ## iPhone 14 Safari
 
 1. Open the deployed URL in a private tab. No login should appear.
-2. Tap Play vs bots, then start. An eight-player match should reach its four-second countdown and begin within ten seconds.
-3. Use the left stick to move. Drag/release the right stick to throw. Hold for a Big Pelt; check it spends two ammo.
-4. Roll with ↝; check the cooldown. Stand on a marked pile to refill. Build a fort and use a glowing pickup.
+2. Tap PLAY, then START MATCH. An eight-player match should reach its four-second countdown and begin within ten seconds.
+3. Use the left side to move and drag the right side to look. Tap THROW; hold it for a Big Pelt and check it spends two ammo.
+4. DIVE twice and check the charges recharge. Hold SCOOP to pack ammo; stand on a glowing pile to refill. Tap WALL and hide behind it. Walk onto a power-up pad.
 5. Rotate to landscape and back. No action should remain stuck down. Background the tab and return.
 6. Finish a match and use the results buttons. Practice coins should persist after refreshing. Buy a hat and see it on the original chibi.
-7. Open Settings, enable debug. Record FPS, draw calls and triangles after five minutes, with the phone model, iOS version, quality tier and thermal condition. Emulation is not evidence of 60 fps here.
-8. Switch to Frost in Season Vault and use Play the Halloween Edition to return.
+7. Open Settings, enable Show FPS. Record FPS, draw calls and triangles after five minutes, with the phone model, iOS version, quality tier and thermal condition. Emulation is not evidence of 60 fps here.
+8. Switch to Frost with the season chip and use Play the Halloween Edition to return.
 
 ## Phone plus laptop
 

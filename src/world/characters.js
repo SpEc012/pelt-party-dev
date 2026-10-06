@@ -1,31 +1,56 @@
-import {THREE,GEO,mesh,mat} from './kit.mjs';
+import {THREE,GEO,mesh} from './kit.mjs';
 import {createChibi} from './chars/chibi.mjs';
 import {STATES} from './chars/chibi-anim.mjs';
 import {EYE,MOUTH} from './chars/face.mjs';
 
 // Extend the supplied pose table; keep the original model proportions and rig.
-STATES.crouch=(p,t)=>{STATES.idle(p,t);p.lLeg=p.rLeg=.8;p.lKnee=p.rKnee=1.3;p.spineRx=.22;p.hipY=-.12;};
-STATES.throw=(p,t)=>{STATES.idle(p,t);const u=Math.min(1,t/.32);p.rFwd=u<.38?-.9:1.8*(1-u);p.rElbow=.6;p.spineRy=Math.sin(u*Math.PI)*-.3;p.eyes=EYE.SQUINT;};
-STATES.charge=(p,t)=>{STATES.idle(p,t);p.rFwd=-.8;p.rElbow=1.6;p.hipY=-.045;p.spineRx=.15;p.mouth=MOUTH.O;};
-STATES.roll=(p,t)=>{STATES.idle(p,t);p.bodyRx=-Math.min(1,t/.28)*Math.PI*2;p.bodyY=.25;p.lLeg=p.rLeg=1;p.lKnee=p.rKnee=1.8;p.lFwd=p.rFwd=1.5;};
-STATES.hit=(p,t)=>{STATES.idle(p,t);p.spineRx=-.35*Math.max(0,1-t/.3);p.eyes=EYE.WIDE;p.mouth=MOUTH.O;};
-STATES.splat=(p,t)=>{STATES.idle(p,t);p.hipY=-.13;p.spineRx=-.3;p.headRz=Math.sin(t*8)*.17;p.eyes=EYE.SAD;p.mouth=MOUTH.WOBBLE;};
-STATES.victory=(p,t)=>{STATES.idle(p,t);p.lFwd=p.rFwd=2.5;p.bodyY=Math.abs(Math.sin(t*5))*.12;p.eyes=EYE.HAPPY;p.mouth=MOUTH.GRIN;};
+// Body rotations pivot near the belly so dives and slides read as a whole-body move.
+const PIVOT=.42;
+const pivot=(p,rx)=>{p.bodyRx=rx;p.bodyY+=PIVOT-PIVOT*Math.cos(rx);p.bodyZ-=PIVOT*Math.sin(rx);};
+const sm=t=>t<=0?0:t>=1?1:t*t*(3-2*t);
+STATES.crouch=(p,t)=>{STATES.idle(p,t);p.lLeg=p.rLeg=.85;p.lKnee=p.rKnee=1.45;p.spineRx=.3;p.hipY=-.12;p.lFwd=p.rFwd=.5;p.lElbow=p.rElbow=1.1;p.eyes=EYE.SQUINT;};
+STATES.throw=(p,t)=>{STATES.idle(p,t);const u=Math.min(1,t/.3),wind=u<.3?u/.3:1,whip=u<.3?0:sm((u-.3)/.35);
+  p.rFwd=-1.5*wind*(1-whip)+2.1*whip*(1-sm((u-.7)/.3)*.6);p.rElbow=1.6*(1-whip)+.2;p.rOut=.5;p.lFwd=.9*wind;p.spineRy=-.45*wind+.7*whip;p.spineRx=.1+.25*whip;p.hipRy=-.2*wind+.25*whip;p.eyes=EYE.SQUINT;p.mouth=MOUTH.GRIN;p.browTilt=.4;};
+STATES.charge=(p,t)=>{STATES.idle(p,t);const w=Math.sin(t*16)*.04;p.rFwd=-1.7+w;p.rElbow=1.9;p.rOut=.65;p.lFwd=1.35;p.lOut=.2;p.lElbow=.15;p.spineRy=-.5;p.spineRx=-.05;p.hipY=-.05;p.lLeg=.35;p.rLeg=-.25;p.lKnee=.4;p.rKnee=.3;p.mouth=MOUTH.FLAT;p.eyes=EYE.SQUINT;p.browTilt=.6;};
+STATES.dive=(p,t)=>{STATES.idle(p,t);const u=Math.min(1,t/.42);
+  if(u<.45){const k=sm(u/.45);pivot(p,1.35*k);p.bodyY+=.32*Math.sin(u/.45*Math.PI*.9);p.lFwd=p.rFwd=2.9*k;p.lElbow=p.rElbow=.1;p.lLeg=p.rLeg=-.45*k;p.lKnee=p.rKnee=.3;p.headRx=-.6*k;p.mouth=MOUTH.OPEN;p.eyes=EYE.WIDE;p.ground=0;}
+  else{const k=sm((u-.45)/.55);pivot(p,1.35+(Math.PI*2-1.35)*k);p.lFwd=p.rFwd=2.9*(1-k)+.8*k;p.lElbow=p.rElbow=1.6*k;p.lLeg=p.rLeg=1.1*Math.sin(k*Math.PI);p.lKnee=p.rKnee=2*Math.sin(k*Math.PI);p.mouth=MOUTH.GRIN;p.eyes=EYE.HAPPY;p.ground=k>.85?1:0;}};
+STATES.slide=(p,t)=>{STATES.idle(p,t);const k=sm(Math.min(1,t/.12));pivot(p,-1.05*k);p.bodyY-=.05*k;p.lLeg=1.55*k;p.rLeg=1.2*k;p.lKnee=.1;p.rKnee=1.1*k;p.lFwd=-.4;p.rFwd=2.6*k;p.rOut=.4;p.rElbow=.3;p.headRx=.5*k;p.spineRx=.35*k;p.ground=0;p.mouth=MOUTH.GRIN;p.eyes=EYE.HAPPY;};
+STATES.scoop=(p,t)=>{STATES.crouch(p,t);const pat=Math.abs(Math.sin(t*9));p.spineRx=.62;p.lFwd=p.rFwd=1.1+pat*.4;p.lElbow=p.rElbow=.5+pat*.6;p.lOut=p.rOut=.15;p.headRx=.35;p.eyes=EYE.HAPPY;p.mouth=MOUTH.CAT;};
+STATES.build=(p,t)=>{STATES.crouch(p,t);const u=Math.min(1,t/.35);const push=Math.sin(u*Math.PI*2)*.5+.5;p.lFwd=p.rFwd=1.3+push*.5;p.lElbow=p.rElbow=1.2-push;p.spineRx=.5;p.mouth=MOUTH.OPEN;};
+STATES.hit=(p,t)=>{STATES.idle(p,t);const k=Math.max(0,1-t/.3);p.spineRx=-.5*k;p.headRx=-.4*k;p.lOut=p.rOut=.32+.9*k;p.eyes=EYE.WIDE;p.mouth=MOUTH.O;p.squash=-.08*k;};
+STATES.splat=(p,t)=>{STATES.idle(p,t);const k=sm(Math.min(1,t/.35));pivot(p,-1.45*k);p.lOut=p.rOut=1.3*k;p.lLeg=.5*k;p.rLeg=.3*k;p.headRz=Math.sin(t*7)*.12;p.eyes=EYE.CLOSED;p.mouth=MOUTH.WOBBLE;p.ground=1-k;};
+STATES.victory=(p,t)=>{STATES.idle(p,t);const b=Math.abs(Math.sin(t*5));p.lFwd=p.rFwd=2.6+Math.sin(t*10)*.2;p.lOut=p.rOut=.5;p.bodyY=b*.14;p.squash=-.06*b;p.eyes=EYE.HAPPY;p.mouth=MOUTH.GRIN;};
+STATES.taunt=(p,t)=>{STATES.idle(p,t);p.rFwd=1.8;p.rOut=.9;p.rElbow=1.5+Math.sin(t*14)*.4;p.headRz=Math.sin(t*6)*.15;p.eyes=EYE.WINK;p.mouth=MOUTH.TONGUE;};
 
-const LOOKS={
+export const LOOKS={
   pip:{skin:'#f7d0b5',hair:'short',hairColor:'#8d5c38',eyes:'round',top:'hoodie',topColor:'#7fc3c9',bottom:'shorts',bottomColor:'#3f4a5c',shoes:'sneakers',shoeColor:'#f6efe4',hat:'beanie',hatColor:'#f7d77a',extra:'none'},
   dot:{skin:'#f7d0b5',hair:'bun',hairColor:'#f3efe6',eyes:'happy',top:'cardigan',topColor:'#e25b4f',bottom:'skirt',bottomColor:'#3f4a5c',shoes:'flats',shoeColor:'#3f4a5c',hat:'none',extra:'glasses'},
   chad:{skin:'#cf9570',hair:'buzz',hairColor:'#2e211b',eyes:'round',top:'tank',topColor:'#3f4a5c',bottom:'joggers',bottomColor:'#3f4a5c',shoes:'sneakers',shoeColor:'#e25b4f',hat:'none',extra:'sunnies'},
-  luna:{skin:'#ffe3d3',hair:'long',hairColor:'#9b86dc',eyes:'sleepy',top:'kimono',topColor:'#b69be0',bottom:'skirt',bottomColor:'#8ea6e6',shoes:'sandals',shoeColor:'#f6efe4',hat:'flower',hatColor:'#f6efe4',extra:'earrings'}
+  luna:{skin:'#ffe3d3',hair:'long',hairColor:'#9b86dc',eyes:'sleepy',top:'kimono',topColor:'#b69be0',bottom:'skirt',bottomColor:'#8ea6e6',shoes:'sandals',shoeColor:'#f6efe4',hat:'flower',hatColor:'#f6efe4',extra:'earrings'},
+  jingle:{skin:'#f7d0b5',hair:'curly',hairColor:'#ecc987',eyes:'sparkle',top:'sweater',topColor:'#3f9b5a',bottom:'leggings',bottomColor:'#f7d77a',shoes:'boots',shoeColor:'#5b3825',hat:'none',extra:'blush'},
+  kit:{skin:'#eab792',hair:'pigtails',hairColor:'#d9745f',eyes:'happy',top:'overalls',topColor:'#8ea6e6',bottom:'jeans',bottomColor:'#3f4a5c',shoes:'rainboots',shoeColor:'#f7d77a',hat:'none',extra:'freckles'},
+  rex:{skin:'#a9714c',hair:'spiky',hairColor:'#2e211b',eyes:'wink',top:'jersey',topColor:'#d8434f',bottom:'cargo',bottomColor:'#6b8f5e',shoes:'sneakers',shoeColor:'#f6efe4',hat:'none',extra:'bandaid'},
+  mabel:{skin:'#ffe3d3',hair:'bob',hairColor:'#f3a9c4',eyes:'lashes',top:'dress',topColor:'#e76f8f',bottom:'skirt',bottomColor:'#f6efe4',shoes:'flats',shoeColor:'#e76f8f',hat:'bow',hatColor:'#f6efe4',extra:'heartpin'},
+  ozzy:{skin:'#7b4b33',hair:'afro',hairColor:'#2e211b',eyes:'round',top:'flannel',topColor:'#c98b5a',bottom:'jeans',bottomColor:'#3f4a5c',shoes:'boots',shoeColor:'#5b3825',hat:'none',extra:'scarf'},
+  yuki:{skin:'#ffe3d3',hair:'ponytail',hairColor:'#76bccd',eyes:'sparkle',top:'hoodie',topColor:'#f6efe4',bottom:'joggers',bottomColor:'#76bccd',shoes:'sneakers',shoeColor:'#76bccd',hat:'none',extra:'earrings'}
 };
+const BUILT_IN={beanie:'#e25b4f',frog:'#9fd39a'};
 export function character(id='pip',hat='none',quality='low'){
-  const look={...(LOOKS[id]||LOOKS.pip)};if(hat!=='none')look.hat='none';const c=createChibi(look,{quality});
-  if(hat!=='none'){
+  const look={...(LOOKS[id]||LOOKS.pip)};
+  if(BUILT_IN[hat]){look.hat=hat;look.hatColor=BUILT_IN[hat];}else if(hat!=='none')look.hat='none';
+  const c=createChibi(look,{quality});
+  if(hat!=='none'&&!BUILT_IN[hat]){
     const g=new THREE.Group();c.skull.add(g);
     if(hat==='witch'){mesh(GEO.cyl,'#383049',g,[0,1,0],[1.55,.14,1.4]);mesh(GEO.cone,'#383049',g,[.1,1.85,0],[.95,1.8,.95],[0,0,-.13]);mesh(GEO.cyl,'#d99853',g,[0,1.3,0],[.84,.2,.84]);}
     if(hat==='pumpkin'){mesh(GEO.lowSphere,'#df793b',g,[0,1,0],[1.12,.43,1.03]);mesh(GEO.cyl,'#596745',g,[0,1.5,0],[.14,.4,.14],[0,0,-.3]);}
     if(hat==='cat')for(const s of [-1,1]){mesh(GEO.cone,'#3a3442',g,[s*.66,1.22,0],[.4,.8,.25],[0,0,-s*.3]);mesh(GEO.cone,'#d79794',g,[s*.66,1.22,.2],[.23,.48,.08],[0,0,-s*.3]);}
     if(hat==='crown'){mesh(GEO.cyl,'#dca74b',g,[0,1.1,0],[1.1,.35,1.1]);for(let i=0;i<5;i++){const a=i/5*Math.PI*2;mesh(GEO.cone,'#f1ce78',g,[Math.sin(a)*.9,1.5,Math.cos(a)*.9],[.24,.7,.24]);}}
+    if(hat==='elf'){mesh(GEO.cyl,'#e25b4f',g,[0,.98,0],[1.08,.22,1.04]);mesh(GEO.cone,'#3f9b5a',g,[0,1.75,-.25],[.95,1.6,.95],[-.45,0,0]);mesh(GEO.lowSphere,'#f7d77a',g,[0,2.25,-.95],[.2,.2,.2]);}
+    if(hat==='santa'){mesh(GEO.cyl,'#ffffff',g,[0,.98,0],[1.12,.28,1.08]);mesh(GEO.cone,'#d8434f',g,[0,1.6,-.15],[1,1.3,1],[-.5,0,0]);mesh(GEO.lowSphere,'#ffffff',g,[0,1.95,-.85],[.26,.26,.26]);}
+    if(hat==='antlers')for(const s of [-1,1]){mesh(GEO.lowCyl,'#8a5a3c',g,[s*.55,1.35,0],[.07,.75,.07],[0,0,-s*.35]);mesh(GEO.lowCyl,'#8a5a3c',g,[s*.8,1.55,0],[.06,.4,.06],[0,0,-s*1.1]);mesh(GEO.lowCyl,'#8a5a3c',g,[s*.62,1.75,0],[.05,.35,.05],[0,0,s*.4]);}
+    if(hat==='earmuffs'){mesh(GEO.torus,'#f6efe4',g,[0,.45,0],[1.04,1.04,.4],[0,Math.PI/2,0]);for(const s of [-1,1])mesh(GEO.lowSphere,'#f3a9c4',g,[s*1.02,.02,0],[.32,.38,.38]);}
+    if(hat==='tophat'){mesh(GEO.cyl,'#25222c',g,[0,1.02,0],[1.25,.08,1.25]);mesh(GEO.cyl,'#25222c',g,[0,1.55,0],[.78,1.05,.78]);mesh(GEO.cyl,'#d8434f',g,[0,1.15,0],[.8,.16,.8]);}
   }
-  c.root.traverse(n=>{if(n.isMesh)n.castShadow=false;});return c;
+  c.root.traverse(n=>{if(n.isMesh){n.castShadow=false;n.receiveShadow=false;}});return c;
 }
