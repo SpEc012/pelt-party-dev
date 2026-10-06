@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 — October 6, 2026
+
+- Dive, slide and ragdoll no longer sink into the ground (rotation around the feet, per-frame ground check against the real geometry).
+- Real physics ragdoll: rigid body with gravity, spin, bounce and friction colliding on sampled body geometry; arms, legs and head are gravity-driven damped springs. Bodies tumble, skid about 2 m and settle in about 2 seconds in varied poses.
+
+
 ## 1.1.0 — October 6, 2026 — accounts and goals
 
 - Username/password accounts (PBKDF2-SHA256, hashed session tokens, lockout, per-IP sign-up limit) on new `Account` and `Leaderboard` Durable Objects (migration v2).
