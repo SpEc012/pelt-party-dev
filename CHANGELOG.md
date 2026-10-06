@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2 — October 6, 2026
+
+- Articulated ragdoll: 15 Verlet joint particles (pelvis, neck, head, shoulders, elbows, hands, hips, knees, feet) with bone constraints, a rigid torso, a floppy neck and elbow/knee fold limits; each particle collides with the ground and slides with friction. The rig's real joints are rotated every frame to follow the simulation, so every limb flops independently. Throws and Big Pelt splashes knock nearby ragdolls around.
+
+
 ## 1.1.1 — October 6, 2026
 
 - Dive, slide and ragdoll no longer sink into the ground (rotation around the feet, per-frame ground check against the real geometry).

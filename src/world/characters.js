@@ -23,9 +23,8 @@ STATES.build=(p,t)=>{STATES.crouch(p,t);const u=Math.min(1,t/.35);const push=Mat
 STATES.hit=(p,t)=>{STATES.idle(p,t);const k=Math.max(0,1-t/.3);p.spineRx=-.5*k;p.headRx=-.4*k;p.lOut=p.rOut=.32+.9*k;p.eyes=EYE.WIDE;p.mouth=MOUTH.O;p.squash=-.08*k;};
 // Ragdoll pose: the whole body is tipped onto its back by the renderer; here the limbs flail in the air, then splay and twitch.
 // Physics ragdoll: joint angles come from the renderer's simulation (ctx.rag); the face stays silly.
-STATES.ragdoll=(p,t,c)=>{STATES.idle(p,t);p.ground=0;const j=c.rag;p.hipX=p.hipRz=p.spineRz=0;
-  if(j){p.lFwd=j.lF;p.rFwd=j.rF;p.lOut=j.lO;p.rOut=j.rO;p.lLeg=j.lL;p.rLeg=j.rL;p.lLegOut=j.lLO;p.rLegOut=j.rLO;p.lKnee=j.lK;p.rKnee=j.rK;p.lElbow=j.lE;p.rElbow=j.rE;p.headRx=j.hx;p.headRz=j.hz;p.spineRx=j.sx;}
-  const k=j?.t??t;p.eyes=k<.5?EYE.WIDE:Math.floor(k*1.5)%4===3?EYE.CLOSED:EYE.STAR;p.mouth=k<.5?MOUTH.O:MOUTH.TONGUE;};
+// Physics ragdoll: the renderer drives every joint from the simulation (see ragdoll.js); this only sets the silly face.
+STATES.ragdoll=(p,t)=>{STATES.idle(p,t);p.ground=0;p.hipX=p.hipRz=p.spineRz=p.spineRx=0;p.eyes=t<.5?EYE.WIDE:Math.floor(t*1.5)%4===3?EYE.CLOSED:EYE.STAR;p.mouth=t<.5?MOUTH.O:MOUTH.TONGUE;};
 STATES.splat=(p,t)=>{STATES.idle(p,t);p.ground=0;
   if(t<.75){const w=t*22;p.lFwd=1.6+Math.sin(w)*1.4;p.rFwd=1.6+Math.sin(w+2)*1.4;p.lOut=p.rOut=.9+Math.sin(w*.7)*.5;p.lElbow=p.rElbow=.4;p.lLeg=.9+Math.sin(w+1)*.9;p.rLeg=.9+Math.sin(w+3)*.9;p.lKnee=p.rKnee=.8+Math.sin(w*1.3)*.6;p.eyes=EYE.WIDE;p.mouth=MOUTH.O;p.headRz=Math.sin(w*.5)*.3;}
   else{const k=t-.75,tw=Math.max(0,Math.sin(k*13))*Math.exp(-k*.9);p.lOut=p.rOut=1.45;p.lFwd=.6;p.rFwd=.9;p.lElbow=.5+tw*.6;p.rElbow=.3;p.lLegOut=.45;p.rLegOut=.5;p.lLeg=.35+tw*.7;p.rLeg=.25+Math.max(0,Math.sin(k*11+1))*Math.exp(-k*.9)*.6;p.lKnee=.25+tw;p.rKnee=.2;p.headRz=Math.sin(k*3)*.18;p.eyes=Math.floor(k*1.5)%3===2?EYE.CLOSED:EYE.STAR;p.mouth=MOUTH.TONGUE;}};
