@@ -143,12 +143,21 @@ export class World {
     let dx=0,dz=0;if(from){dx=pose.x-from.x;dz=pose.z-from.z;}const d=Math.hypot(dx,dz);if(d>.01){dx/=d;dz/=d;}else{const f=(this.actors.get(slot)?.facing)||0;dx=-Math.sin(f);dz=-Math.cos(f);}
     const vy=4.6+Math.random()*1.6;return {t0:settled?performance.now()-5000:performance.now(),dx,dz,vy,air:2*vy/18,flips:Math.random()<.35?2:1,side:Math.random()<.5?-1:1,face:Math.atan2(-dx,-dz),push:2+Math.random()*1.2,landed:settled};
   }
+  // Lowest world-space height of an object's opaque geometry, from a cached sample of its vertices.
+  lowest(obj){
+    obj.updateMatrixWorld(true);let list=obj.userData.groundSamples;
+    if(!list){list=[];obj.traverse(n=>{if(!n.isMesh||n.material?.transparent)return;const pos=n.geometry?.attributes?.position;if(!pos?.count)return;const step=Math.max(1,Math.floor(pos.count/120)),pts=[];for(let i=0;i<pos.count;i+=step)pts.push(pos.getX(i),pos.getY(i),pos.getZ(i));list.push({mesh:n,pts:new Float32Array(pts)});});obj.userData.groundSamples=list;}
+    let low=Infinity;
+    for(const {mesh,pts}of list){let v=mesh,shown=true;while(v&&v!==obj.parent){if(!v.visible&&v!==obj){shown=false;break;}v=v.parent;}if(!shown)continue;
+      const e=mesh.matrixWorld.elements;for(let i=0;i<pts.length;i+=3){const y=e[1]*pts[i]+e[5]*pts[i+1]+e[9]*pts[i+2]+e[13];if(y<low)low=y;}}
+    return low===Infinity?0:low;
+  }
   ragdoll(slot,pose,from){const a=this.actors.get(slot);if(a)a.rag=this.makeRag(slot,pose,from);}
   ragPose(rag,t,out){
     // Resting: tilted so the big head and the heels both touch the ground.
-    const REST=-1.2,g=18,k=1-Math.exp(-3.2*t);out.x=rag.dx*rag.push*k;out.z=rag.dz*rag.push*k;
-    if(t<rag.air){const u=t/rag.air;out.y=Math.max(0,rag.vy*t-g*t*t/2)+.05*u;out.rx=REST*u-Math.PI*2*rag.flips*(u*u*(3-2*u));out.rz=Math.sin(u*Math.PI)*.7*rag.side;return out;}
-    const t2=t-rag.air,vb=rag.vy*.3,tb=2*vb/g;out.y=.05+(t2<tb?vb*t2-g*t2*t2/2:0);out.rx=REST+(t2<tb?Math.sin(t2/tb*Math.PI)*.25:0);out.rz=t2<tb?Math.sin(t2/tb*Math.PI)*.2*rag.side:0;return out;
+    const REST=-1.24,g=18,k=1-Math.exp(-3.2*t);out.x=rag.dx*rag.push*k;out.z=rag.dz*rag.push*k;
+    if(t<rag.air){const u=t/rag.air;out.y=Math.max(0,rag.vy*t-g*t*t/2)+.02*u;out.rx=REST*u-Math.PI*2*rag.flips*(u*u*(3-2*u));out.rz=Math.sin(u*Math.PI)*.7*rag.side;return out;}
+    const t2=t-rag.air,vb=rag.vy*.3,tb=2*vb/g;out.y=.02+(t2<tb?vb*t2-g*t2*t2/2:0);out.rx=REST+(t2<tb?Math.sin(t2/tb*Math.PI)*.25:0);out.rz=t2<tb?Math.sin(t2/tb*Math.PI)*.2*rag.side:0;return out;
   }
   animate(slot,anim,duration=400){const a=this.actors.get(slot);if(a){a.anim=anim;a.animUntil=performance.now()+duration;a.rig.play(anim);}}
   // Particles: count scales with the quality preset.
@@ -258,7 +267,11 @@ export class World {
         if(p.respawnAt||flags&2)anim='splat';else if(state.phase==='results')anim=ctx.winners?.has(p.slot)?'victory':'taunt';else if(flags&1)anim='dive';else if(flags&8)anim='slide';else if(a.animUntil>performance.now())anim=a.anim;else if(flags&16)anim='scoop';else if(speed>.4)anim=speed>3.2?'run':'walk';else if(flags&4||pose.crouch)anim='crouch';
         if(a.rig.state!==anim)a.rig.play(anim);a.rig.setSpeed(speed/1.55);
         r.visible=tier===-1&&visible;if(r.visible)a.rig.update(dt,t+(typeof p.slot==='number'?p.slot:0));
-        for(let i=0;i<a.levels.length;i++){const lod=a.levels[i];lod.visible=tier===i&&visible;if(lod.visible){lod.position.copy(r.position);if(dead)lod.rotation.copy(r.rotation);else{lod.rotation.set(flags&1?1.2:flags&8?-.9:0,r.rotation.y,0,'YXZ');lod.position.y=reduced?0:Math.abs(Math.sin(t*11+p.slot))*.04*Math.min(1,speed/4);}}}
+        // Dives, slides and ragdolls rotate the whole body: measure the real geometry and keep it on the ground.
+        const tumbling=dead||flags&1||flags&8;
+        const shadow=a.rig._rig?.shadow;if(shadow)shadow.visible=!tumbling;
+        if(r.visible&&tumbling){const low=this.lowest(r);r.position.y+=dead&&a.rag?.landed?-low:Math.max(0,-low);}
+        for(let i=0;i<a.levels.length;i++){const lod=a.levels[i];lod.visible=tier===i&&visible;if(lod.visible){lod.position.copy(r.position);if(dead)lod.rotation.copy(r.rotation);else{lod.rotation.set(flags&1?1.2:flags&8?-.9:0,r.rotation.y,0,'YXZ');lod.position.y=tumbling?0:reduced?0:Math.abs(Math.sin(t*11+p.slot))*.04*Math.min(1,speed/4);}lod.userData.blob??=lod.children.find(c=>c.material?.transparent&&c.material.depthWrite===false)||null;if(lod.userData.blob)lod.userData.blob.visible=!tumbling;if(tumbling){const low=this.lowest(lod);lod.position.y+=dead&&a.rag?.landed?-low:Math.max(0,-low);}}}
       }
       // Pelts, their trails and the charge arc.
       let n=0,s=0,tr=0,gg=0;const night=this.P?.night;
