@@ -84,4 +84,4 @@ Live gameplay travels over WebSockets. HTTP is used to create/find a room. There
 
 ## Source and rights
 
-The chibi modules and the relevant geometry/appearance helpers were supplied by the repository owner on October 5, 2026. The original proportions and painted faces are retained. No garden, café, chat, relationship or arcade gameplay is integrated. No external art/models/audio are downloaded at runtime. Three.js and development dependencies retain their own licenses. The owner has not selected a project license yet; none is implied here.
+The chibi rig and the relevant geometry/appearance helpers were supplied by the repository owner on October 5, 2026. The original proportions and painted faces are retained. Only locomotion, pose blending, model construction and facial rendering are retained from that source. Garden props, paired gestures and photo-booth/bed animations were removed. No garden, café, chat, relationship or arcade gameplay is integrated. No external art/models/audio are downloaded at runtime. Three.js and development dependencies retain their own licenses. The owner has not selected a project license yet; none is implied here.
