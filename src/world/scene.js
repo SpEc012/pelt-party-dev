@@ -1,6 +1,7 @@
 import {THREE,GEO,mat,mesh,mergeStatic,rng,disposeTree,canvasTexture} from './kit.mjs';
 import {character} from './characters.js';
 import {bakeLevels} from './lod.js';
+import {Ragdoll} from './ragdoll.js';
 import {buildProp,buildBackdrop,groundTexture,palette} from './props.js';
 import {SEASONS,POWERS,makeMap} from '../../shared/content.mjs';
 import {peltAt,makePelt,clamp,flightEnd} from '../../shared/physics.mjs';
@@ -16,7 +17,6 @@ export const QUALITY={
 const V=()=>new THREE.Vector3();
 const _v1=V(),_v2=V(),_v3=V(),_target=V(),_look=V(),_sphere=new THREE.Sphere(),_center=new THREE.Vector2(0,0),_hit=V(),_q=new THREE.Quaternion(),_e=new THREE.Euler(),_s=V(),_m=new THREE.Matrix4(),_m2=new THREE.Matrix4(),_col=new THREE.Color();
 const P0={},P1={};
-const JOINTS=['lF','rF','lO','rO','lL','rL','lLO','rLO','lK','rK','lE','rE','hx','hz','sx'];
 
 function skyMaterial(top,horizon,bottom){
   return new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,uniforms:{top:{value:new THREE.Color(top)},horizon:{value:new THREE.Color(horizon)},bottom:{value:new THREE.Color(bottom)}},
@@ -149,63 +149,23 @@ export class World {
       const e=mesh.matrixWorld.elements;for(let i=0;i<pts.length;i+=3){const y=e[1]*pts[i]+e[5]*pts[i+1]+e[9]*pts[i+2]+e[13];if(y<low)low=y;}}
     return low===Infinity?0:low;
   }
-  // ---------------------------------------------------------------- ragdoll physics
-  // The body is a rigid body (gravity, spin, bounce, friction) that collides with the ground using
-  // samples of its real geometry. Arms, legs and head are damped springs pulled by gravity in the
-  // body's frame, so the chibi flops and settles wherever physics leaves it.
-  bodySamples(a){
-    if(a.body)return a.body;const r=a.rig.root;this.lowest(r);r.updateMatrixWorld(true);const inv=_m2.copy(r.matrixWorld).invert(),pts=[];
-    for(const {mesh,pts:src}of r.userData.groundSamples){_m.multiplyMatrices(inv,mesh.matrixWorld);for(let i=0;i<src.length;i+=3){_v3.set(src[i],src[i+1],src[i+2]).applyMatrix4(_m);
-      if(_v3.y>.15&&_v3.y<.55&&Math.abs(_v3.x)>.17)continue;pts.push(_v3.x,_v3.y,_v3.z);}}
-    const keep=[],step=Math.max(1,Math.floor(pts.length/3/180));for(let i=0;i<pts.length;i+=3*step)keep.push(pts[i],pts[i+1],pts[i+2]);
-    return a.body={pts:new Float32Array(keep),com:new THREE.Vector3(0,.5,0),scale:r.scale.x};
-  }
+  // ---------------------------------------------------------------- ragdoll
   makeRag(a,pose,from,settled=false){
-    const body=this.bodySamples(a),sc=body.scale;let dx=0,dz=0;if(from){dx=pose.x-from.x;dz=pose.z-from.z;}let d=Math.hypot(dx,dz);if(d<.01){dx=-Math.sin(a.facing);dz=-Math.cos(a.facing);d=1;}dx/=d;dz/=d;
-    const q=new THREE.Quaternion().setFromEuler(_e.set(0,a.facing,0,'YXZ')),pos=new THREE.Vector3(pose.x,0,pose.z).add(_v3.copy(body.com).multiplyScalar(sc).applyQuaternion(q));
-    const push=2.4+Math.random()*1.8,flip=(6+Math.random()*4)*(Math.random()<.8?1:-1);
-    const w=new THREE.Vector3(dz,0,-dx).multiplyScalar(-flip);w.y=(Math.random()-.5)*6;w.x+=(Math.random()-.5)*3;w.z+=(Math.random()-.5)*3;
-    const j={};for(const k of JOINTS)j[k]=[(Math.random()-.5)*.6,(Math.random()-.5)*14];
-    const rag={p:pos,v:new THREE.Vector3(dx*push,4.2+Math.random()*2.2,dz*push),q,w,j,acc:0,t:0,sleep:0,landed:false,nextStar:0,root:new THREE.Vector3(),pose:{}};
-    if(settled){for(let i=0;i<480;i++)this.ragStep(a,rag,1/120);rag.landed=true;rag.landAt=0;}this.ragRoot(a,rag);return rag;
+    let dx=0,dz=0;if(from){dx=pose.x-from.x;dz=pose.z-from.z;}const d=Math.hypot(dx,dz);if(d>.01){dx/=d;dz/=d;}else{dx=-Math.sin(a.facing);dz=-Math.cos(a.facing);}
+    const r=a.rig.root;if(!a.rag){r.position.set(pose.x,0,pose.z);r.rotation.set(0,a.facing,0,'YXZ');}
+    const rag=new Ragdoll(a.rig,{dir:{x:dx,z:dz},push:2.4+Math.random()*1.8,up:4+Math.random()*2.2,spin:(5+Math.random()*5)*(Math.random()<.8?1:-1)});
+    rag.nextStar=0;if(settled){for(let i=0;i<600&&!rag.asleep;i++)rag.step();rag.thump=0;rag.landed=true;}return rag;
   }
   ragdoll(slot,pose,from){const a=this.actors.get(slot);if(a)a.rag=this.makeRag(a,pose,from);}
-  ragRoot(a,rag){const b=a.body;rag.root.copy(b.com).multiplyScalar(-b.scale).applyQuaternion(rag.q).add(rag.p);}
-  ragStep(a,rag,h){
-    const b=a.body,sc=b.scale,pts=b.pts,c=b.com,q=rag.q,v=rag.v,w=rag.w,I=.16,g=18;rag.t+=h;
-    if(rag.sleep>=1){v.set(0,0,0);w.set(0,0,0);}
-    if(rag.sleep<1){
-      v.y-=g*h;rag.p.addScaledVector(v,h);
-      _q.set(w.x*h*.5,w.y*h*.5,w.z*h*.5,0).multiply(q);q.x+=_q.x;q.y+=_q.y;q.z+=_q.z;q.w+=_q.w;q.normalize();
-      // Deepest geometry point against the ground plane.
-      let min=Infinity,rx=0,ry=0,rz=0;_m.makeRotationFromQuaternion(q);const e=_m.elements;
-      for(let i=0;i<pts.length;i+=3){const x=(pts[i]-c.x)*sc,y=(pts[i+1]-c.y)*sc,z=(pts[i+2]-c.z)*sc,wy=e[1]*x+e[5]*y+e[9]*z;if(wy+rag.p.y<min){min=wy+rag.p.y;rx=e[0]*x+e[4]*y+e[8]*z;ry=wy;rz=e[2]*x+e[6]*y+e[10]*z;}}
-      if(min<0){rag.p.y-=min;
-        const vx=v.x+w.y*rz-w.z*ry,vy=v.y+w.z*rx-w.x*rz,vz=v.z+w.x*ry-w.y*rx;
-        if(vy<0){const e2=vy<-3?.32:.05,jn=-(1+e2)*vy/(1+(rx*rx+rz*rz)/I);v.y+=jn;w.x+=-rz*jn/I;w.z+=rx*jn/I;
-          const vt=Math.hypot(vx,vz);if(vt>1e-4){const k=1/(1+(rx*rx+ry*ry+rz*rz)/I),jt=Math.min(.7*jn,vt*k),fx=-vx/vt*jt,fz=-vz/vt*jt;v.x+=fx;v.z+=fz;w.x+=(ry*fz)/I;w.y+=(rz*fx-rx*fz)/I;w.z+=(-ry*fx)/I;}
-          if(vy<-3){for(const k of JOINTS)rag.j[k][1]+=(Math.random()-.5)*Math.min(30,-vy*4);if(!rag.landed){rag.landed=true;rag.landAt=rag.t;}rag.thump=Math.max(rag.thump||0,-vy);}}
-        rag.contact=rag.t;
-      }
-      // Rolling resistance grows over time so the body flops, skids and then actually comes to rest.
-      if(rag.t-(rag.contact??-1)<.06){const tired=1+Math.max(0,rag.t-1.2)*3;w.multiplyScalar(Math.exp(-5*tired*h));v.x*=Math.exp(-4*tired*h);v.z*=Math.exp(-4*tired*h);
-        if(v.lengthSq()<.05&&w.lengthSq()<.15)rag.sleep+=h*3;else rag.sleep=Math.max(0,rag.sleep-h);}
-    }
-    // Floppy limbs: springs toward where gravity hangs them in the body's frame.
-    _q.copy(q).invert();_v1.set(0,-1,0).applyQuaternion(_q);const gx=_v1.x,gy=_v1.y,gz=_v1.z,hang=Math.atan2(gz,-gy),side=Math.atan2(gx,Math.hypot(gy,gz)),spring=rag.sleep>=1?14:28;
-    const T={lF:clamp(hang,-1.3,2.9),rF:clamp(hang,-1.3,2.9),lO:clamp(.35+side*1.3,0,2.6),rO:clamp(.35-side*1.3,0,2.6),lL:clamp(hang,-.7,1.9),rL:clamp(hang,-.7,1.9),lLO:clamp(.1+side*.8,0,.9),rLO:clamp(.1-side*.8,0,.9),
-      lK:clamp(.15+gz*.9,0,1.9),rK:clamp(.2+gz*.8,0,1.9),lE:clamp(.25+gz*.6,0,1.8),rE:clamp(.3+gz*.5,0,1.8),hx:clamp(hang*.3,-.35,.35),hz:clamp(-side*.4,-.35,.35),sx:clamp(hang*.15,-.25,.25)};
-    for(const k of JOINTS){const s2=rag.j[k];s2[1]+=(spring*(T[k]-s2[0])-5.5*s2[1])*h;s2[0]+=s2[1]*h;}
-  }
-  // After the limbs are posed, nothing may stay under the floor: lift the body (and the simulation) out.
-  ragGround(a,obj){const low=this.lowest(obj);if(low<.01){const rag=a.rag;rag.contact=rag.t;if(low<0){obj.position.y-=low;rag.p.y-=low;rag.root.y-=low;if(rag.v.y<0)rag.v.y=0;}}}
   stepRag(a,dt){
-    const rag=a.rag;rag.acc+=Math.min(dt,.05);while(rag.acc>=1/120){rag.acc-=1/120;this.ragStep(a,rag,1/120);}
-    this.ragRoot(a,rag);
-    if(rag.thump){if(rag.thump>3){this.burst(rag.p.x,.2,rag.p.z,Math.min(24,rag.thump*3),{color:this.P?.frost?'#ffffff':'#c9b98f',speed:4,up:2,size:.1,life:.5});this.onLand?.(rag.p.x,rag.p.z,rag.thump);}rag.thump=0;}
-    const P=rag.pose;for(const k of JOINTS)P[k]=rag.j[k][0];P.t=rag.t;
-    if(rag.landed&&rag.t-rag.landAt>.4&&!this.settings.reduced&&performance.now()>rag.nextStar){rag.nextStar=performance.now()+260;const head=_v1.set(0,.87,0).multiplyScalar(a.body.scale).applyQuaternion(rag.q).add(rag.root),a2=rag.t*5;this.burst(head.x+Math.cos(a2)*.38,head.y+.35,head.z+Math.sin(a2)*.38,1,{color:'#ffe680',speed:.3,up:.4,size:.09,life:.6,gravity:0});}
+    const rag=a.rag;rag.update(dt);
+    if(rag.thump>3){const c=rag.center;this.burst(c.x,.2,c.z,Math.min(24,rag.thump*2),{color:this.P?.frost?'#ffffff':'#c9b98f',speed:4,up:2,size:.1,life:.5});if(rag.thump>5)this.onLand?.(c.x,c.z,rag.thump);}rag.thump=0;
+    if(rag.landed&&rag.t>.6&&!this.settings.reduced&&performance.now()>rag.nextStar){rag.nextStar=performance.now()+260;const h=rag.head,a2=rag.t*5;this.burst(h.x+Math.cos(a2)*.4,h.y+.45,h.z+Math.sin(a2)*.4,1,{color:'#ffe680',speed:.3,up:.4,size:.09,life:.6,gravity:0});}
   }
+  // After posing, nothing may stay under the floor (hats, hair): lift the body and the simulation.
+  ragGround(a,obj){const low=this.lowest(obj);if(low<0){obj.position.y-=low;a.rag.lift(-low);}}
+  // Splashes and throws knock ragdolls around.
+  shove(x,y,z,strength,radius){for(const a of this.actors.values())if(a.rag&&Math.abs(a.rag.center.x-x)<radius+1.5&&Math.abs(a.rag.center.z-z)<radius+1.5)a.rag.impulse(x,y,z,strength,radius);}
   animate(slot,anim,duration=400){const a=this.actors.get(slot);if(a){a.anim=anim;a.animUntil=performance.now()+duration;a.rig.play(anim);}}
   // Particles: count scales with the quality preset.
   burst(x,y,z,n,{color='#ffffff',speed=4,up=3,size=.08,life=.6,gravity=12,spread=1}={}){
@@ -215,6 +175,7 @@ export class World {
   decal(x,z,size=1){if(this.decals.length>=120)this.decals.shift();this.decals.push({x,z,size:size*(.8+Math.random()*.5),rot:Math.random()*6.28,born:performance.now()});}
   fx(m){
     const P=this.P||{},ammo=P.frost?'#ffffff':P.night?'#ff9a3c':P.fall?'#e0873a':'#f6b6cf',y=m.y??.6;
+    if(m.kind==='impact'||m.kind==='thud'||m.kind==='burst')this.shove(m.x,y,m.z,m.kind==='burst'?(m.giga?14:10):4,m.kind==='burst'?(m.giga?4.6:3.2):1.4);
     if(m.kind==='impact'||m.kind==='thud'){this.burst(m.x,Math.max(.1,y),m.z,14,{color:ammo,speed:4,up:3.5,size:.07});if(y<.4)this.decal(m.x,m.z,.9);}
     if(m.kind==='burst'){this.burst(m.x,Math.max(.1,y),m.z,46,{color:ammo,speed:m.giga?11:8,up:6,size:.11,life:.8});this.burst(m.x,.2,m.z,16,{color:'#ffffff',speed:6,up:1,size:.18,life:.5,gravity:2});this.decal(m.x,m.z,m.giga?3.4:2.2);}
     if(m.kind==='hit'){this.burst(m.x,1.1,m.z,22,{color:ammo,speed:5,up:4,size:.09});}
@@ -267,8 +228,8 @@ export class World {
   // While splatted: pull up and slowly circle your own ragdoll.
   deathCamera(dt,pos,face,state){
     // Look from the ragdoll's side, framed low on screen so the death card sits above it.
-    this.deathYaw??=face+Math.PI*.5;this.deathYaw+=dt*.28;const b=cameraBasis(this.deathYaw),cx=pos.x-Math.sin(face)*.55,cz=pos.z-Math.cos(face)*.55;
-    _target.set(cx,1.25,cz);const c=cameraClearance(_target,{x:cx-b.fx*5.6,y:3.4,z:cz-b.fz*5.6},[state.map.props,state.forts]);_v1.set(clamp(c.x,-state.map.width/2+.4,state.map.width/2-.4),Math.max(1,c.y),clamp(c.z,-state.map.depth/2+.4,state.map.depth/2-.4));this.camera.position.lerp(_v1,1-Math.exp(-dt*3.5));this.camera.lookAt(_target);
+    this.deathYaw??=face+Math.PI*.5;this.deathYaw+=dt*.28;const b=cameraBasis(this.deathYaw),cx=pos.x,cz=pos.z;
+    _target.set(cx,.9,cz);const c=cameraClearance(_target,{x:cx-b.fx*5.6,y:3.4,z:cz-b.fz*5.6},[state.map.props,state.forts]);_v1.set(clamp(c.x,-state.map.width/2+.4,state.map.width/2-.4),Math.max(1,c.y),clamp(c.z,-state.map.depth/2+.4,state.map.depth/2-.4));this.camera.position.lerp(_v1,1-Math.exp(-dt*3.5));this.camera.lookAt(_target);
     if(Math.abs(this.camera.fov-58)>.05){this.camera.fov+=(58-this.camera.fov)*(1-Math.exp(-dt*5));this.camera.updateProjectionMatrix();}
     this.cameraReady=false;
   }
@@ -289,7 +250,7 @@ export class World {
     const {state,poses,mySlot,aim,reduced}=ctx,t=performance.now()/1000;
     if(this.hitStop>0){this.hitStop-=dt*1000;dt*=.12;}
     const me=poses.get(mySlot);
-    if(this.mode==='play'&&me&&state&&ctx.dead){const a=this.actors.get(mySlot);this.deathCamera(dt,a?.rig.root.position||me,a?.rag?.face??this.yaw,state);}
+    if(this.mode==='play'&&me&&state&&ctx.dead){const a=this.actors.get(mySlot);this.deathCamera(dt,a?.rag?.center||me,this.yaw,state);}
     else if(this.mode==='play'&&me&&state){this.deathYaw=null;this.combatCamera(dt,me,state,ctx);}
     else if(this.mode==='hero')this.heroCamera(dt);
     else this.menuCamera(dt,state,poses);
@@ -301,19 +262,19 @@ export class World {
       for(const p of state.players){const a=this.actors.get(p.slot);if(!a)continue;const pose=poses.get(p.slot)||p,r=a.rig.root;
         const speed=Math.hypot(pose.vx||0,pose.vz||0),flags=pose.flags??0;
         const dead=!!(p.respawnAt||flags&2);
-        if(dead){a.rag??=this.makeRag(a,pose,null,true);this.stepRag(a,dt);r.position.copy(a.rag.root);r.quaternion.copy(a.rag.q);}
+        if(dead){a.rag??=this.makeRag(a,pose,null,true);this.stepRag(a,dt);}
         else{if(a.rag)a.rag=null;r.position.set(pose.x,0,pose.z);const face=(flags&1||flags&8)&&speed>1?Math.atan2(pose.vx,pose.vz):pose.facing||0;const delta=Math.atan2(Math.sin(face-a.facing),Math.cos(face-a.facing));a.facing+=delta*Math.min(1,dt*20);r.rotation.set(0,a.facing,0,'YXZ');}
-        const dist=Math.hypot(pose.x-camX,pose.z-camZ);_sphere.center.set(pose.x,1,pose.z);_sphere.radius=1.6;const visible=this.frustum.intersectsSphere(_sphere);
+        const px=dead?a.rag.center.x:pose.x,pz=dead?a.rag.center.z:pose.z,dist=Math.hypot(px-camX,pz-camZ);_sphere.center.set(px,1,pz);_sphere.radius=1.6;const visible=this.frustum.intersectsSphere(_sphere);
         const tier=p.slot===mySlot||dist<full?-1:dist<lod0?0:1;
         let anim='idle';
         if(dead)anim='ragdoll';else if(state.phase==='results')anim=ctx.winners?.has(p.slot)?'victory':'taunt';else if(flags&1)anim='dive';else if(flags&8)anim='slide';else if(a.animUntil>performance.now())anim=a.anim;else if(flags&16)anim='scoop';else if(speed>.4)anim=speed>3.2?'run':'walk';else if(flags&4||pose.crouch)anim='crouch';
-        if(a.rig.state!==anim)a.rig.play(anim);a.rig.setSpeed(speed/1.55);if(dead){const cx=a.rig._rig.ctx;if(cx)cx.rag=a.rag.pose;}
+        if(a.rig.state!==anim)a.rig.play(anim);a.rig.setSpeed(speed/1.55);
         r.visible=tier===-1&&visible;if(r.visible)a.rig.update(dt,t+(typeof p.slot==='number'?p.slot:0));
         // Dives, slides and ragdolls rotate the whole body: measure the real geometry and keep it on the ground.
         const tumbling=dead||flags&1||flags&8;
         const shadow=a.rig._rig?.shadow;if(shadow)shadow.visible=!tumbling;
         if(r.visible&&tumbling&&!dead){const low=this.lowest(r);r.position.y+=Math.max(0,-low);}
-        if(r.visible&&dead)this.ragGround(a,r);
+        if(dead){if(r.visible){a.rag.pose();this.ragGround(a,r);}else a.rag.placeRoot();}
         for(let i=0;i<a.levels.length;i++){const lod=a.levels[i];lod.visible=tier===i&&visible;if(lod.visible){lod.position.copy(r.position);if(dead)lod.quaternion.copy(r.quaternion);else{lod.rotation.set(flags&1?1.2:flags&8?-.9:0,r.rotation.y,0,'YXZ');lod.position.y=tumbling?0:reduced?0:Math.abs(Math.sin(t*11+p.slot))*.04*Math.min(1,speed/4);}lod.userData.blob??=lod.children.find(c=>c.material?.transparent&&c.material.depthWrite===false)||null;if(lod.userData.blob)lod.userData.blob.visible=!tumbling;if(tumbling&&!dead){const low=this.lowest(lod);lod.position.y+=Math.max(0,-low);}if(dead)this.ragGround(a,lod);}}
       }
       // Pelts, their trails and the charge arc.
