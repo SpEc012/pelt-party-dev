@@ -138,6 +138,18 @@ export class World {
     const old=this.actors.get('hero');if(old&&old.character===look.character&&old.hat===look.hat)return;if(old){this.dropActor(old);this.actors.delete('hero');}
     if(!look)return;const a=this.addActor({slot:'hero',character:look.character,hat:look.hat,x:0,z:0});a.levels.forEach(l=>l.visible=false);
   }
+  // Silly ragdoll: launched away from the thrower, a backflip or two, a bounce, then flat on the back.
+  makeRag(slot,pose,from,settled=false){
+    let dx=0,dz=0;if(from){dx=pose.x-from.x;dz=pose.z-from.z;}const d=Math.hypot(dx,dz);if(d>.01){dx/=d;dz/=d;}else{const f=(this.actors.get(slot)?.facing)||0;dx=-Math.sin(f);dz=-Math.cos(f);}
+    const vy=4.6+Math.random()*1.6;return {t0:settled?performance.now()-5000:performance.now(),dx,dz,vy,air:2*vy/18,flips:Math.random()<.35?2:1,side:Math.random()<.5?-1:1,face:Math.atan2(-dx,-dz),push:2+Math.random()*1.2,landed:settled};
+  }
+  ragdoll(slot,pose,from){const a=this.actors.get(slot);if(a)a.rag=this.makeRag(slot,pose,from);}
+  ragPose(rag,t,out){
+    // Resting: tilted so the big head and the heels both touch the ground.
+    const REST=-1.2,g=18,k=1-Math.exp(-3.2*t);out.x=rag.dx*rag.push*k;out.z=rag.dz*rag.push*k;
+    if(t<rag.air){const u=t/rag.air;out.y=Math.max(0,rag.vy*t-g*t*t/2)+.05*u;out.rx=REST*u-Math.PI*2*rag.flips*(u*u*(3-2*u));out.rz=Math.sin(u*Math.PI)*.7*rag.side;return out;}
+    const t2=t-rag.air,vb=rag.vy*.3,tb=2*vb/g;out.y=.05+(t2<tb?vb*t2-g*t2*t2/2:0);out.rx=REST+(t2<tb?Math.sin(t2/tb*Math.PI)*.25:0);out.rz=t2<tb?Math.sin(t2/tb*Math.PI)*.2*rag.side:0;return out;
+  }
   animate(slot,anim,duration=400){const a=this.actors.get(slot);if(a){a.anim=anim;a.animUntil=performance.now()+duration;a.rig.play(anim);}}
   // Particles: count scales with the quality preset.
   burst(x,y,z,n,{color='#ffffff',speed=4,up=3,size=.08,life=.6,gravity=12,spread=1}={}){
@@ -196,6 +208,14 @@ export class World {
     const fov=(this.settings.fov||72)+(ctx.diving?12:ctx.sliding?9:ctx.sprinting?6:0)-14*this.zoom-(ctx.charge>0?4:0);
     if(Math.abs(this.camera.fov-fov)>.05){this.camera.fov+=(fov-this.camera.fov)*(1-Math.exp(-dt*9));this.camera.updateProjectionMatrix();}
   }
+  // While splatted: pull up and slowly circle your own ragdoll.
+  deathCamera(dt,pos,face,state){
+    // Look from the ragdoll's side, framed low on screen so the death card sits above it.
+    this.deathYaw??=face+Math.PI*.5;this.deathYaw+=dt*.28;const b=cameraBasis(this.deathYaw),cx=pos.x-Math.sin(face)*.55,cz=pos.z-Math.cos(face)*.55;
+    _target.set(cx,1.25,cz);const c=cameraClearance(_target,{x:cx-b.fx*5.6,y:3.4,z:cz-b.fz*5.6},[state.map.props,state.forts]);_v1.set(clamp(c.x,-state.map.width/2+.4,state.map.width/2-.4),Math.max(1,c.y),clamp(c.z,-state.map.depth/2+.4,state.map.depth/2-.4));this.camera.position.lerp(_v1,1-Math.exp(-dt*3.5));this.camera.lookAt(_target);
+    if(Math.abs(this.camera.fov-58)>.05){this.camera.fov+=(58-this.camera.fov)*(1-Math.exp(-dt*5));this.camera.updateProjectionMatrix();}
+    this.cameraReady=false;
+  }
   menuCamera(dt,state,poses){
     // Cinematic drift around the live demo match behind the menu.
     this.orbit+=dt*.06;const map=state?.map||this.map;if(!map)return;
@@ -213,7 +233,8 @@ export class World {
     const {state,poses,mySlot,aim,reduced}=ctx,t=performance.now()/1000;
     if(this.hitStop>0){this.hitStop-=dt*1000;dt*=.12;}
     const me=poses.get(mySlot);
-    if(this.mode==='play'&&me&&state)this.combatCamera(dt,me,state,ctx);
+    if(this.mode==='play'&&me&&state&&ctx.dead){const a=this.actors.get(mySlot);this.deathCamera(dt,a?.rig.root.position||me,a?.rag?.face??this.yaw,state);}
+    else if(this.mode==='play'&&me&&state){this.deathYaw=null;this.combatCamera(dt,me,state,ctx);}
     else if(this.mode==='hero')this.heroCamera(dt);
     else this.menuCamera(dt,state,poses);
     this.camera.updateMatrixWorld();this.viewProj.multiplyMatrices(this.camera.projectionMatrix,this.camera.matrixWorldInverse);this.frustum.setFromProjectionMatrix(this.viewProj);
@@ -223,15 +244,21 @@ export class World {
       const camX=this.camera.position.x,camZ=this.camera.position.z,q=this.quality,full=q.full,lod0=q.lod0;
       for(const p of state.players){const a=this.actors.get(p.slot);if(!a)continue;const pose=poses.get(p.slot)||p,r=a.rig.root;
         const speed=Math.hypot(pose.vx||0,pose.vz||0),flags=pose.flags??0;
-        r.position.set(pose.x,0,pose.z);
-        const face=(flags&1||flags&8)&&speed>1?Math.atan2(pose.vx,pose.vz):pose.facing||0;const delta=Math.atan2(Math.sin(face-a.facing),Math.cos(face-a.facing));a.facing+=delta*Math.min(1,dt*20);r.rotation.y=a.facing;
+        const dead=!!(p.respawnAt||flags&2);let lift=0,rx=0,rz=0,ox=0,oz=0;
+        if(dead){const rag=a.rag??=this.makeRag(p.slot,pose,null,true);const t2=(performance.now()-rag.t0)/1000;this.ragPose(rag,t2,P1);lift=P1.y;rx=P1.rx;rz=P1.rz;ox=P1.x;oz=P1.z;a.facing=rag.face;
+          if(!rag.landed&&t2>rag.air){rag.landed=true;this.burst(pose.x+ox,.2,pose.z+oz,18,{color:this.P?.frost?'#ffffff':'#c9b98f',speed:4,up:2,size:.1,life:.5});this.onLand?.(pose.x+ox,pose.z+oz);}
+          if(rag.landed&&!reduced&&performance.now()>(rag.nextStar||0)){rag.nextStar=performance.now()+260;const a2=t2*5;this.burst(pose.x+ox-Math.sin(rag.face)*1.1+Math.cos(a2)*.35,.75,pose.z+oz-Math.cos(rag.face)*1.1+Math.sin(a2)*.35,1,{color:'#ffe680',speed:.3,up:.4,size:.09,life:.6,gravity:0});}}
+        else if(a.rag)a.rag=null;
+        r.position.set(pose.x+ox,lift,pose.z+oz);
+        if(!dead){const face=(flags&1||flags&8)&&speed>1?Math.atan2(pose.vx,pose.vz):pose.facing||0;const delta=Math.atan2(Math.sin(face-a.facing),Math.cos(face-a.facing));a.facing+=delta*Math.min(1,dt*20);}
+        r.rotation.set(rx,a.facing,rz,'YXZ');
         const dist=Math.hypot(pose.x-camX,pose.z-camZ);_sphere.center.set(pose.x,1,pose.z);_sphere.radius=1.6;const visible=this.frustum.intersectsSphere(_sphere);
         const tier=p.slot===mySlot||dist<full?-1:dist<lod0?0:1;
         let anim='idle';
         if(p.respawnAt||flags&2)anim='splat';else if(state.phase==='results')anim=ctx.winners?.has(p.slot)?'victory':'taunt';else if(flags&1)anim='dive';else if(flags&8)anim='slide';else if(a.animUntil>performance.now())anim=a.anim;else if(flags&16)anim='scoop';else if(speed>.4)anim=speed>3.2?'run':'walk';else if(flags&4||pose.crouch)anim='crouch';
         if(a.rig.state!==anim)a.rig.play(anim);a.rig.setSpeed(speed/1.55);
         r.visible=tier===-1&&visible;if(r.visible)a.rig.update(dt,t+(typeof p.slot==='number'?p.slot:0));
-        for(let i=0;i<a.levels.length;i++){const lod=a.levels[i];lod.visible=tier===i&&visible;if(lod.visible){lod.position.copy(r.position);lod.rotation.y=r.rotation.y;lod.position.y=reduced?0:Math.abs(Math.sin(t*11+p.slot))*.04*Math.min(1,speed/4);lod.rotation.x=flags&1?1.2:flags&8?-.9:0;}}
+        for(let i=0;i<a.levels.length;i++){const lod=a.levels[i];lod.visible=tier===i&&visible;if(lod.visible){lod.position.copy(r.position);if(dead)lod.rotation.copy(r.rotation);else{lod.rotation.set(flags&1?1.2:flags&8?-.9:0,r.rotation.y,0,'YXZ');lod.position.y=reduced?0:Math.abs(Math.sin(t*11+p.slot))*.04*Math.min(1,speed/4);}}}
       }
       // Pelts, their trails and the charge arc.
       let n=0,s=0,tr=0,gg=0;const night=this.P?.night;

@@ -4,6 +4,10 @@ import {cameraBasis} from '../shared/controller.mjs';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const colorOf=id=>CHARACTERS.find(c=>c.id===id)?.color||'#ffffff';
 const MODE={ffa:'FREE-FOR-ALL',team:'TEAM PELT',king:'KING OF THE HILL'};
+const CAPTIONS=['That’s gonna leave a mark.','Absolutely flattened.','You got PELTED.','Face, meet ground.','Down goes the champ!','Splat-tastic.','Need a hug?','Ouch. Right in the dignity.','Yeet received.','Flat as a pancake.','Certified bonk.','Did you see that?! Everyone did.'];
+const FROSTY=['Brain freeze!','Snow way!','Ice to meet you.','Frosty the No-man.','Chill out for a sec.','Somebody get this kid a cocoa.'];
+const SPOOKY=['Pumpkin’d!','Gourd-geous splat.','Squashed!','Spooked & smooshed.','You got jack-o’-lanterned.','Boo-hoo.'];
+const TIPS=['Dive (SPACE) through a throw — you’re untouchable mid-dive.','Press Q to slam a wall, then crouch behind it.','Charged Big Pelts splash everyone nearby.','Glowing piles refill ammo much faster than scooping.','Keep strafing: moving targets are hard to hit.','Grab pads for Shield, Cocoa, Giga Ball and more.','Sprint, then press C to slide into cover.','Lead your throws: aim where they’re going.'];
 
 // The match HUD is built once per match; per-frame updates only touch text and styles that changed.
 export class Hud {
@@ -18,6 +22,7 @@ export class Hud {
       <div id="damage-dirs"></div>
       <div id="callouts"></div>
       <div id="banner"><strong></strong><small></small></div>
+      <div id="death"><div class="d-splat"></div><strong class="d-title">SPLATTED!</strong><p class="d-caption"></p><div class="d-killer"><i></i><span><small>SPLATTED BY</small><b></b><em></em></span></div><div class="d-timer"><svg viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="26"/><circle class="fill" cx="32" cy="32" r="26"/></svg><span></span></div><p class="d-tip"></p></div>
       <div id="vignette"></div><div id="frost-edge"></div>
       <div class="hud-bl">
         <div id="hearts"></div>
@@ -33,7 +38,7 @@ export class Hud {
       <div id="hint" hidden></div>
     </div>`;
     const q=s=>root.querySelector(s);
-    this.el={clock:q('#clock'),mode:q('#mode-label'),race:q('#race'),net:q('#net'),mini:q('#minimap'),cross:q('#crosshair'),ring:q('#charge-ring'),hit:q('#hitmarker'),dirs:q('#damage-dirs'),callouts:q('#callouts'),banner:q('#banner'),bannerT:q('#banner strong'),bannerS:q('#banner small'),vig:q('#vignette'),frost:q('#frost-edge'),hearts:q('#hearts'),dive:q('#ab-dive'),wall:q('#ab-wall'),slide:q('#ab-slide'),powers:q('#powers'),ammoN:q('#ammo-n'),ammoL:q('#ammo-label'),ammoP:q('#ammo-pips'),ammoHint:q('#ammo-hint'),board:q('#scoreboard'),hint:q('#hint'),feed:q('#killfeed')};
+    this.el={clock:q('#clock'),mode:q('#mode-label'),race:q('#race'),net:q('#net'),mini:q('#minimap'),cross:q('#crosshair'),ring:q('#charge-ring'),hit:q('#hitmarker'),dirs:q('#damage-dirs'),callouts:q('#callouts'),banner:q('#banner'),bannerT:q('#banner strong'),bannerS:q('#banner small'),vig:q('#vignette'),frost:q('#frost-edge'),hearts:q('#hearts'),dive:q('#ab-dive'),wall:q('#ab-wall'),slide:q('#ab-slide'),powers:q('#powers'),ammoN:q('#ammo-n'),ammoL:q('#ammo-label'),ammoP:q('#ammo-pips'),ammoHint:q('#ammo-hint'),board:q('#scoreboard'),hint:q('#hint'),feed:q('#killfeed'),death:q('#death'),dCaption:q('#death .d-caption'),dKiller:q('#death .d-killer'),dKillerName:q('#death .d-killer b'),dKillerSub:q('#death .d-killer em'),dKillerDot:q('#death .d-killer i'),dTime:q('#death .d-timer span'),dRing:q('#death .d-timer .fill'),dTip:q('#death .d-tip')};
     this.el.ammoP.innerHTML='<i></i>'.repeat(RULES.maxAmmo);this.pips=[...this.el.ammoP.children];
     this.el.hearts.innerHTML='<i></i>'.repeat(RULES.hp);this.heartEls=[...this.el.hearts.children];
     this.mctx=this.el.mini.getContext('2d');
@@ -78,12 +83,21 @@ export class Hud {
     // Phase banners.
     let title='',sub='';
     if(state.phase==='starting'){title=String(Math.max(1,Math.ceil((state.startAt-time)/1000)));sub='GET READY';}
-    else if(me?.respawnAt){title='SPLATTED';sub=`${f.killer?`BY ${esc(f.killer).toUpperCase()} · `:''}BACK IN ${Math.max(1,Math.ceil((me.respawnAt-time)/1000))}`;}
+
     else if(state.phase==='playing'&&time-state.startAt<1200){title='GO!';sub='';}
     this.set('bt',el.bannerT,title);this.set('bs',el.bannerS,sub);this.cls('banner',el.banner,'show',!!title);this.cls('banner',el.banner,'count',state.phase==='starting');
+    this.deathScreen(f,me,time);
     this.set('net',el.net,f.net);
     if(time-this.lastMini>50){this.lastMini=time;this.minimap(f);}
     if(!el.board.hidden)this.scoreboard(state,me);
+  }
+  deathScreen(f,me,time){
+    const el=this.el,dead=!!me?.respawnAt&&f.state.phase==='playing';this.cls('death',el.death,'show',dead);if(!dead){this.deathAt=0;return;}
+    if(this.deathAt!==me.respawnAt){this.deathAt=me.respawnAt;const pick=a=>a[Math.floor(Math.random()*a.length)];
+      el.dCaption.textContent=pick(f.season==='halloween'?CAPTIONS.concat(SPOOKY):f.season==='frost'?CAPTIONS.concat(FROSTY):CAPTIONS);el.dTip.textContent='TIP · '+pick(TIPS);
+      const k=f.killerInfo;el.dKiller.hidden=!k;if(k){el.dKillerName.textContent=k.name;el.dKillerDot.style.background=colorOf(k.character);el.dKillerSub.textContent=k.streak>=2?`🔥 ${k.streak} splat streak`:k.hp?`${'♥'.repeat(k.hp)} left`:'';}
+      el.death.classList.remove('pop');void el.death.offsetWidth;el.death.classList.add('pop');}
+    const left=Math.max(0,me.respawnAt-time);this.set('dt',el.dTime,String(Math.max(1,Math.ceil(left/1000))));el.dRing.style.strokeDashoffset=String(163.4*(left/RULES.respawn));
   }
   minimap({state,poses,me,mySlot,yaw,local}){
     const g=this.mctx,s=this.ms;if(!this.miniBase)return;g.clearRect(0,0,168,168);g.drawImage(this.miniBase,0,0);

@@ -19,7 +19,10 @@ STATES.slide=(p,t)=>{STATES.idle(p,t);const k=sm(Math.min(1,t/.12));pivot(p,-1.0
 STATES.scoop=(p,t)=>{STATES.crouch(p,t);const pat=Math.abs(Math.sin(t*9));p.spineRx=.62;p.lFwd=p.rFwd=1.1+pat*.4;p.lElbow=p.rElbow=.5+pat*.6;p.lOut=p.rOut=.15;p.headRx=.35;p.eyes=EYE.HAPPY;p.mouth=MOUTH.CAT;};
 STATES.build=(p,t)=>{STATES.crouch(p,t);const u=Math.min(1,t/.35);const push=Math.sin(u*Math.PI*2)*.5+.5;p.lFwd=p.rFwd=1.3+push*.5;p.lElbow=p.rElbow=1.2-push;p.spineRx=.5;p.mouth=MOUTH.OPEN;};
 STATES.hit=(p,t)=>{STATES.idle(p,t);const k=Math.max(0,1-t/.3);p.spineRx=-.5*k;p.headRx=-.4*k;p.lOut=p.rOut=.32+.9*k;p.eyes=EYE.WIDE;p.mouth=MOUTH.O;p.squash=-.08*k;};
-STATES.splat=(p,t)=>{STATES.idle(p,t);const k=sm(Math.min(1,t/.35));pivot(p,-1.45*k);p.lOut=p.rOut=1.3*k;p.lLeg=.5*k;p.rLeg=.3*k;p.headRz=Math.sin(t*7)*.12;p.eyes=EYE.CLOSED;p.mouth=MOUTH.WOBBLE;p.ground=1-k;};
+// Ragdoll pose: the whole body is tipped onto its back by the renderer; here the limbs flail in the air, then splay and twitch.
+STATES.splat=(p,t)=>{STATES.idle(p,t);p.ground=0;
+  if(t<.75){const w=t*22;p.lFwd=1.6+Math.sin(w)*1.4;p.rFwd=1.6+Math.sin(w+2)*1.4;p.lOut=p.rOut=.9+Math.sin(w*.7)*.5;p.lElbow=p.rElbow=.4;p.lLeg=.9+Math.sin(w+1)*.9;p.rLeg=.9+Math.sin(w+3)*.9;p.lKnee=p.rKnee=.8+Math.sin(w*1.3)*.6;p.eyes=EYE.WIDE;p.mouth=MOUTH.O;p.headRz=Math.sin(w*.5)*.3;}
+  else{const k=t-.75,tw=Math.max(0,Math.sin(k*13))*Math.exp(-k*.9);p.lOut=p.rOut=1.45;p.lFwd=.6;p.rFwd=.9;p.lElbow=.5+tw*.6;p.rElbow=.3;p.lLegOut=.45;p.rLegOut=.5;p.lLeg=.35+tw*.7;p.rLeg=.25+Math.max(0,Math.sin(k*11+1))*Math.exp(-k*.9)*.6;p.lKnee=.25+tw;p.rKnee=.2;p.headRz=Math.sin(k*3)*.18;p.eyes=Math.floor(k*1.5)%3===2?EYE.CLOSED:EYE.STAR;p.mouth=MOUTH.TONGUE;}};
 STATES.victory=(p,t)=>{STATES.idle(p,t);const b=Math.abs(Math.sin(t*5));p.lFwd=p.rFwd=2.6+Math.sin(t*10)*.2;p.lOut=p.rOut=.5;p.bodyY=b*.14;p.squash=-.06*b;p.eyes=EYE.HAPPY;p.mouth=MOUTH.GRIN;};
 STATES.taunt=(p,t)=>{STATES.idle(p,t);p.rFwd=1.8;p.rOut=.9;p.rElbow=1.5+Math.sin(t*14)*.4;p.headRz=Math.sin(t*6)*.15;p.eyes=EYE.WINK;p.mouth=MOUTH.TONGUE;};
 

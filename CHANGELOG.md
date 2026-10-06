@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0 — October 6, 2026 — accounts and goals
+
+- Username/password accounts (PBKDF2-SHA256, hashed session tokens, lockout, per-IP sign-up limit) on new `Account` and `Leaderboard` Durable Objects (migration v2).
+- Server-owned progress: coins, XP, levels, unlocks, equipped look, lifetime stats; purchases and equips validated on the server.
+- Online rooms credit signed-in players from their own results; bot matches are clamped, spaced and capped.
+- Daily (3) and weekly (2) challenges, 11 achievements with exclusive hats, daily login streak, level-up coins, global ranks.
+- New Account, Challenges and Ranks screens; results show server-confirmed rewards and claimable goals.
+- Ragdoll deaths that land flat on the ground, stars, a bounce sound, a "SPLATTED!" death screen with the killer, countdown and tips, and a circling death camera.
+- Settings shows the frame rate the browser is actually delivering and how to unlock 144/240 Hz.
+
+
 ## 1.0.0 — October 6, 2026 — the big rework
 
 - **Move set**: 2-charge dive with invulnerability frames, slide (crouch while sprinting), crouch cover, slippery ice; faster run/sprint; knockback on hit.
