@@ -14,8 +14,10 @@ export function safeName(value){
 export function encodeWorld(players,round,now){
   const list=players.filter(p=>!p.spectator),buf=new ArrayBuffer(14+list.length*11),v=new DataView(buf);
   v.setUint8(0,1);v.setUint32(1,round);v.setFloat64(5,now);v.setUint8(13,list.length);
-  list.forEach((p,i)=>{const a=14+i*11;v.setUint8(a,p.slot);v.setInt16(a+1,Math.round(p.x*100));v.setInt16(a+3,Math.round(p.z*100));v.setUint8(a+5,Math.round(((p.facing||0)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)/(Math.PI*2)*255));v.setInt16(a+6,Math.round(clamp(p.vx||0,-30,30)*100));v.setInt16(a+8,Math.round(clamp(p.vz||0,-30,30)*100));v.setUint8(a+10,(p.rollUntil>now?1:0)|(p.respawnAt?2:0)|(p.crouch?4:0));});return buf;
+  list.forEach((p,i)=>{const a=14+i*11;v.setUint8(a,p.slot);v.setInt16(a+1,Math.round(p.x*100));v.setInt16(a+3,Math.round(p.z*100));v.setUint8(a+5,Math.round(((p.facing||0)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)/(Math.PI*2)*255));v.setInt16(a+6,Math.round(clamp(p.vx||0,-30,30)*100));v.setInt16(a+8,Math.round(clamp(p.vz||0,-30,30)*100));v.setUint8(a+10,flagsOf(p,now));});return buf;
 }
+// Animation bits: 1 dive, 2 splatted, 4 crouch, 8 slide, 16 scooping, 32 shielded.
+export const flagsOf=(p,now)=>((p.diveMoveUntil||0)>now?1:0)|(p.respawnAt?2:0)|(p.crouch?4:0)|((p.slideUntil||0)>now?8:0)|(p.scooping?16:0)|((p.shieldUntil||0)>now?32:0);
 export function decodeWorld(buf){
   const v=new DataView(buf);if(v.byteLength<14||v.getUint8(0)!==1)return null;
   const n=v.getUint8(13);if(n>20||v.byteLength!==14+n*11)return null;

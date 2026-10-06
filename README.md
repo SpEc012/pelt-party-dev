@@ -1,19 +1,37 @@
 # Pelt Party
 
-A cozy procedural 3D pumpkin fight for browsers. Built for Dylan's Handshake multiplayer game project. **Work in progress — not a contest-ready release yet.**
+A fast 3D snowball fight for up to 20 players in the browser. Dive through incoming throws, slide into cover, slam down a snow wall and splat your friends. No login, nothing to install. Built for Dylan's Handshake multiplayer game project.
 
-## What is playable
+## What is playable (1.0)
 
-- Browser-only solo matches with 4, 8, 12 or 20 participants and three bot difficulty settings.
-- The original supplied chibi rig, faces, hair and clothing, with added fight animations and procedural hats.
-- Movement, charged throws, rolling, restocking piles, forts, three pickups, hearts, respawn, results and rematch.
-- Pelt Party, Team Pelt and King of the Patch; three prototype arena layouts.
-- Keyboard/mouse, twin-stick touch and gamepad input.
-- Cloudflare Worker + Durable Object WebSocket rooms, four-character codes, Quick Play, reconnect, auto-start and majority-voted bot fill.
-- 20 player seats and 10 spectator seats; binary movement frames and adaptive 12–30 Hz updates.
-- Seasonal previews, Halloween return button, tutorial hints, sound effects, local practice coins and wardrobe.
+- **Play vs bots** starts a full match in seconds, entirely in the browser: 4 to 20 players, Rookie / Regular / Ace bots, Free-for-all, Teams or King of the Hill.
+- **Movement built for hero moments**: run, sprint, a 2-charge **dive** with brief invulnerability, a **slide** (crouch while sprinting), crouching behind cover, and slippery ice ponds.
+- **Quick cover**: `Q` slams a curved three-segment wall (snow, pumpkins, leaves or hedge by season). Walls absorb hits, crumble and expire.
+- **Ammo economy**: carry up to 8. Glowing piles refill fast; hold `R` anywhere to scoop by hand. The last 30 seconds are a **Blizzard** with double refill and cheaper Big Pelts.
+- **Throws**: tap for a fast, flat throw; hold to charge a **Big Pelt** (2 damage, splash). Misses keep flying until they land.
+- **Five visible power-up pads**: Triple Toss, Snow Shield, Hot Cocoa, Giga Ball, Sugar Rush.
+- **Competitive feedback**: hit markers, damage direction, kill feed, streak and multi-splat callouts (Double Splat, Snowstorm, Shutdown, Payback), hit-stop, scoreboard (`Tab`), race-to-the-limit bar, minimap and end-of-match awards.
+- **Four authored arenas**, each re-skinned for every season: Frosty Commons (city park with a skyline), Maple Street (parked cars and front yards), Pumpkin Patch (hay lanes) and Haunted Hollow (tombstones and a crypt). Bigger lobbies get a 20% larger arena.
+- **Ten chibis** from the supplied rig plus twelve hats; coins and XP saved on this device; Locker with live 3D preview.
+- **New menu** with a live bot match behind it, **synthesised seasonal music** that intensifies in the Blizzard, and new sound effects.
+- **Settings**: quality preset (Low to Ultra), unlimited or capped frame rate (30 to 240), render scale, shadows, weather, FOV, mouse and aim sensitivity, invert Y, toggle crouch and sprint, volumes, camera shake, reduced motion, FPS display.
+- Keyboard and mouse (pointer lock), gamepad, and touch controls with a floating stick.
+- Online: Cloudflare Worker + Durable Object WebSocket rooms, four-character codes, Quick Play, reconnect to the same seat, auto-start and majority-voted bot fill, 20 players plus 10 spectators, binary movement frames at an adaptive 12 to 30 Hz.
 
-See [STATUS.md](STATUS.md) for measured tests and the unfinished work. The current maps, economy and characters do **not** yet implement the entire game bible.
+See [STATUS.md](STATUS.md) for what was measured and what is still open.
+
+## Controls
+
+| Action | Keyboard / mouse | Gamepad | Touch |
+| --- | --- | --- | --- |
+| Move / sprint | WASD / Shift | Left stick / L3 | Left side stick (push fully to sprint) |
+| Look / aim | Mouse / hold right button | Right stick / LT | Drag the right side |
+| Throw (hold to charge) | Left button | RT | THROW |
+| Dive | Space | A | DIVE |
+| Crouch, or slide while sprinting | C | B | CROUCH |
+| Wall | Q | X | WALL |
+| Scoop ammo (hold) | R | Y | SCOOP |
+| Scoreboard / pause | Tab / Esc | – / Start | ❚❚ |
 
 ## Run locally
 
@@ -70,7 +88,11 @@ Browser tests produce screenshots in `test-results/`. iPhone emulation is **not*
 - `shared/physics.mjs`: movement, collision, ballistic pelts and payout calculations.
 - `shared/protocol.mjs`: identity/code validation, binary pose frames and remote interpolation.
 - `server/worker.mjs`: route handling, room allocation, WebSockets, presence and checkpoints.
-- `src/main.js`: browser screens, local motion, victim reports, controls and practice persistence.
+- `shared/maps.mjs`: the four authored arenas as finite collision cylinders.
+- `shared/controller.mjs`: movement curves (run, dive, slide, ice) shared by prediction and validation.
+- `src/main.js`: game loop, local motion, victim reports, input and progress.
+- `src/ui.js`, `src/hud.js`, `src/settings.js`, `src/audio.js`: menus, match HUD, settings and synthesised audio.
+- `src/world/scene.js`, `src/world/props.js`: renderer, quality presets, effects and seasonal map art.
 - `src/world/chars/`: Dylan's original character source; `characters.js` adds fight poses and hats.
 - `src/world/lod.js`: simplified meshes baked from the original character geometry.
 
@@ -78,7 +100,7 @@ Live gameplay travels over WebSockets. HTTP is used to create/find a room. There
 
 ## Debugging
 
-`?debug=1` shows draw calls, triangles, FPS, ping, jitter, clock offset and downstream application bytes. `?lag=120&jitter=30&loss=3` simulates delay and dropped movement messages at the application boundary. `?season=halloween|harvest|frost|meadow` selects a preview; `?date=2026-11-03` tests the local season. Online rooms use the server's selected season and do not change mid-match.
+`?debug=1` (or Settings → Show FPS) shows the frame rate and ping. `?lag=120&jitter=30&loss=3` simulates delay and dropped movement messages at the application boundary. `?season=halloween|harvest|frost|meadow` selects a preview; `?date=2026-11-03` tests the local season. Online rooms use the server's selected season and do not change mid-match.
 
 `?test=1` exposes local browser test hooks; it cannot grant authority over an online room. The online server validates commands independently.
 

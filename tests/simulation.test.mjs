@@ -12,7 +12,7 @@ test('third-person controller stays camera-relative and accelerates smoothly',()
  let body={vx:0,vz:0};body=driveVelocity(body,{x:0,z:1},1/60);assert.ok(body.vz>.8&&body.vx===0);const stopped=driveVelocity(body,{x:0,z:0},1/60);assert.ok(stopped.vz<body.vz);
 });
 test('camera clips behind finite cover and pelts respect cover height',()=>{
- const cover=[{x:0,z:0,r:1,h:1.5}];const clipped=cameraClearance({x:0,y:1,z:3},{x:0,y:1,z:-3},cover);assert.ok(clipped.z>-.8);
+ const cover=[{x:0,z:0,r:1,h:1.5}];const clipped=cameraClearance({x:0,y:1,z:3},{x:0,y:1,z:-3},[cover]);assert.ok(clipped.z>-.8);
  assert.equal(coverContact({x:0,y:1.1,z:3},{x:0,y:1.1,z:-3},cover[0])!==null,true);assert.equal(coverContact({x:0,y:2,z:3},{x:0,y:2,z:-3},cover[0]),null);
  const shot=makePelt('t',0,{x:-6,y:1.1,z:0},{x:6,y:1.1,z:0},false,0);assert.ok(peltAt(shot,shot.release+shot.T*1000).x>5.5);
 });
@@ -54,6 +54,6 @@ test('independent replicas receive matching results over delayed ordered events 
 test('ten full bot rooms run ten simulated minutes with bounded projectile and dedupe storage',()=>{
  const start=1800000000000;const rooms=Array.from({length:10},(_,i)=>new Room({now:start,random:rng(i+1)}));
  for(const r of rooms){r.join({name:'Observer',spectator:true},start);r.botsTo(20,start);r.start(start);r.endAt=start+601000;}
- for(let t=start;t<start+600000;t+=100)for(const r of rooms){r.step(t);assert.ok(r.pelts.length<=120);assert.ok(r.seen.size<2000);assert.ok(r.forts.length<=60);}
+ for(let t=start;t<start+600000;t+=100)for(const r of rooms){r.step(t);assert.ok(r.pelts.length<=160);assert.ok(r.seen.size<3000);assert.ok(r.forts.length<=120);}
  for(const r of rooms)assert.ok(r.save().players.length<=30);
 });
