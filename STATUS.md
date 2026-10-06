@@ -1,10 +1,10 @@
-# Resumable checkpoint — 0.1.0
+# Resumable checkpoint — 0.2.0
 
-Updated October 6, 2026. User approved building continuously, supplied their original chibi source, confirmed a Cloudflare account and selected an iPhone 14 for real-device testing.
+Updated October 6, 2026. User approved building continuously, supplied their original chibi source, confirmed a Cloudflare account and selected an iPhone 14 for real-device testing. The game now uses a close third-person chase camera and the 0.2 gameplay pass is pushed to GitHub.
 
 ## Current position
 
-This is a functional early playable and backend foundation spanning parts of M0–M7. It is **not** completion of those milestones. No production Cloudflare URL has been deployed: Wrangler reports that this workspace is unauthenticated. GitHub write access was restored after the owner reconnected the integration on October 5 (America/Chicago). Source publication is now enabled. Cloudflare deployment remains blocked on authentication; no public game URL exists yet.
+This is a functional early playable and backend foundation spanning parts of M0–M7. It is **not** completion of those milestones. The GitHub deploy workflow now runs on every `main` push, performs the full check, and deploys when the two Cloudflare Actions secrets are configured. With those secrets absent, the latest workflow recorded a clean skipped deployment; the public Cloudflare URL still needs them.
 
 ## Evidence from this workspace
 
