@@ -20,6 +20,16 @@ A fast 3D snowball fight for up to 20 players in the browser. Dive through incom
 
 See [STATUS.md](STATUS.md) for what was measured and what is still open.
 
+## Accounts, challenges and ranks (1.1)
+
+- **Sign up with a username and password** (no email). Passwords are stored only as salted PBKDF2-SHA256 hashes (100,000 iterations) in a per-user Durable Object; sessions are random 256-bit tokens stored as SHA-256 hashes. Five wrong passwords lock the account for a growing delay; new accounts are rate-limited per IP.
+- **Everything saves to the account**: coins, XP and level, unlocked chibis and hats, the equipped look and lifetime stats. Guests keep playing with device-only progress.
+- **The server owns the economy**: purchases, equips and rewards are checked by `shared/progress.mjs` inside the Account object. Clients never send balances.
+- **Online matches** credit signed-in players directly from the room's own results (the room calls the account object; the browser cannot). **Bot matches** count too, but the report is clamped to plausible numbers, must be at least a minute apart and is capped at ◈40 per match and ◈400 per day.
+- **Goals**: 3 daily challenges, 2 weekly challenges, 11 achievements (some unlock exclusive hats), a daily login streak bonus and ◈50 per level-up.
+- **Global ranks**: top players by XP.
+- **Funnier deaths**: splatted chibis ragdoll away from the thrower, backflip, bounce and land flat on their back with stars circling; a "SPLATTED!" death screen shows who got you, a countdown and a tip, while the camera circles your ragdoll.
+
 ## Controls
 
 | Action | Keyboard / mouse | Gamepad | Touch |
@@ -92,6 +102,7 @@ Browser tests produce screenshots in `test-results/`. iPhone emulation is **not*
 - `shared/controller.mjs`: movement curves (run, dive, slide, ice) shared by prediction and validation.
 - `src/main.js`: game loop, local motion, victim reports, input and progress.
 - `src/ui.js`, `src/hud.js`, `src/settings.js`, `src/audio.js`: menus, match HUD, settings and synthesised audio.
+- `server/accounts.mjs`: Account (per user) and Leaderboard Durable Objects; `shared/progress.mjs`: levels, rewards, challenges and caps; `src/account.js`: the browser client.
 - `src/world/scene.js`, `src/world/props.js`: renderer, quality presets, effects and seasonal map art.
 - `src/world/chars/`: Dylan's original character source; `characters.js` adds fight poses and hats.
 - `src/world/lod.js`: simplified meshes baked from the original character geometry.

@@ -1,6 +1,13 @@
-# Resumable checkpoint — 1.0.0
+# Resumable checkpoint — 1.1.0
 
 Updated October 6, 2026. The owner asked for most of the 0.2 prototype to be redone: faster, more competitive pacing, a real dive/slide/quick-cover move set ("the Elf snowball fight"), bigger maps, a new menu, music and settings, and a high frame rate. This is that rework. It was developed on a fork (`SpEc012/pelt-party-dev`) and offered to `dylandev01/pelt-party` as a pull request.
+
+## 1.1 additions (accounts, goals, ragdolls)
+
+- `tests/accounts.test.mjs` (6 tests): hashing and sessions, lockout, purchases and equips, solo clamps/spacing/daily cap, trusted award de-duplication, challenge rotation and claims, and the room-to-account award path.
+- `scripts/socket-test.mjs` against a real local Worker: register over HTTP, duplicate and bad-session rejection, joining a room with a session uses the verified account name, a forged session joins as a guest, the leaderboard lists the account.
+- Browser run against the local Worker: sign up → challenges → claim the daily bonus → bot match → ragdoll death screen → results credited by the server with a level-up → ranks.
+- Limits: no password reset or email (a forgotten password cannot be recovered), no account deletion UI, the per-IP sign-up limit is per Worker isolate, and bot-match rewards still trust the browser's report within the caps.
 
 ## Evidence from this workspace
 

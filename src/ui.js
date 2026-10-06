@@ -1,11 +1,11 @@
 import {BUILD,SEASONS,CHARACTERS,COSMETICS,MAPS,POWERS} from '../shared/content.mjs';
 import {FPS_CAPS} from './settings.js';
+import {levelOf,xpFor,dailyFor,weeklyFor,ACHIEVEMENTS} from '../shared/progress.mjs';
+export {levelOf};
 
 export const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const btn=(action,label,cls='',extra='')=>`<button class="${cls}" data-action="${action}" ${extra}>${label}</button>`;
 const SEASON_ICON={halloween:'🎃',harvest:'🍂',frost:'❄️',meadow:'🌼'};
-export const levelOf=xp=>Math.floor(Math.sqrt(Math.max(0,xp)/60))+1;
-const xpFor=l=>60*(l-1)**2;
 
 export function logo(season){
   return `<div class="logo ${season}"><span class="logo-cap"></span><span class="logo-1">PELT</span><span class="logo-2">PARTY</span><span class="logo-tag">${SEASON_ICON[season]} ${SEASONS[season].name.toUpperCase()}</span></div>`;
@@ -13,9 +13,9 @@ export function logo(season){
 function profileCard(profile){
   const lvl=levelOf(profile.xp),pct=Math.round((profile.xp-xpFor(lvl))/(xpFor(lvl+1)-xpFor(lvl))*100);
   const c=CHARACTERS.find(c=>c.id===profile.character);
-  return `<button class="profile-card" data-action="locker"><span class="avatar" style="--c:${c?.color}">${esc(profile.name[0]||'?')}</span><span class="who"><b>${esc(profile.name)}</b><small>LEVEL ${lvl} · ${c?.name||''}</small><span class="xp"><i style="width:${pct}%"></i></span></span><span class="coins">◈ ${profile.coins}</span></button>`;
+  return `<button class="profile-card" data-action="account"><span class="avatar" style="--c:${c?.color}">${esc(profile.name[0]||'?')}</span><span class="who"><b>${esc(profile.name)}</b><small>${profile.account?`LEVEL ${lvl} · SAVED TO ACCOUNT ✓`:`LEVEL ${lvl} · GUEST · SIGN IN TO SAVE`}</small><span class="xp"><i style="width:${pct}%"></i></span></span><span class="coins">◈ ${profile.coins}</span></button>`;
 }
-export function menu({profile,season,muted}){
+export function menu({profile,season,muted,badge=0}){
   return `<main class="menu">
     <nav class="menu-left">
       ${logo(season)}
@@ -24,7 +24,8 @@ export function menu({profile,season,muted}){
         ${btn('quick','<span>QUICK PLAY</span><small>online · public match</small>','menu-item')}
         ${btn('create','<span>CREATE ROOM</span><small>invite friends with a code</small>','menu-item')}
         ${btn('join','<span>JOIN ROOM</span><small>enter a 4-letter code</small>','menu-item')}
-        <div class="menu-row">${btn('locker','LOCKER','menu-mini')}${btn('settings','SETTINGS','menu-mini')}${btn('how','HOW TO PLAY','menu-mini')}</div>
+        <div class="menu-row">${btn('challenges',`CHALLENGES${badge?`<i class="badge">${badge}</i>`:''}`,'menu-mini')}${btn('locker','LOCKER','menu-mini')}${btn('leaderboard','RANKS','menu-mini')}</div>
+        <div class="menu-row">${btn('account',profile.account?'ACCOUNT':'SIGN IN / UP','menu-mini'+(profile.account?'':' accent'))}${btn('settings','SETTINGS','menu-mini')}${btn('how','HOW TO PLAY','menu-mini')}</div>
       </div>
       ${profileCard(profile)}
     </nav>
@@ -55,20 +56,21 @@ export function locker(profile,tab='characters'){
   const items=tab==='characters'?CHARACTERS.map(c=>{const owned=profile.ownedChars.includes(c.id),on=profile.character===c.id;return `<button class="item ${on?'on':''} ${owned?'':'locked'}" data-action="character:${c.id}"><span class="swatch" style="--c:${c.color}">${c.name[0]}</span><b>${c.name}</b><small>${on?'EQUIPPED':owned?c.title:`◈ ${c.price}`}</small></button>`;}).join('')
     :COSMETICS.map(c=>{const owned=profile.owned.includes(c.id),on=profile.hat===c.id;return `<button class="item ${on?'on':''} ${owned?'':'locked'} r-${c.rarity.toLowerCase()}" data-action="hat:${c.id}"><span class="swatch">${c.icon}</span><b>${c.name}</b><small>${on?'EQUIPPED':owned?c.rarity.toUpperCase():`◈ ${c.price}`}</small></button>`;}).join('');
   return `<aside class="locker"><header><div><small>LOCKER</small><h2>Look sharp.</h2></div>${btn('close','✕','close','aria-label="Close"')}</header>
-    <label class="name-field">NICKNAME<input id="name" maxlength="16" value="${esc(profile.name)}"></label>
+    ${profile.account?`<p class="name-field signed">Signed in as <b>@${esc(profile.name)}</b> · purchases save to your account</p>`:`<label class="name-field">NICKNAME<input id="name" maxlength="16" value="${esc(profile.name)}"></label>`}
     <div class="tabs">${btn('tab:characters','CHIBIS',tab==='characters'?'on':'')}${btn('tab:hats','HATS',tab==='hats'?'on':'')}<span class="wallet">◈ ${profile.coins}</span></div>
     <div class="item-grid">${items}</div><p class="fine">Coins come from matches and are saved on this device.</p></aside>`;
 }
 const slider=(id,label,value,min,max,step,fmt=v=>v)=>`<label class="slider">${label}<span><input type="range" id="set-${id}" min="${min}" max="${max}" step="${step}" value="${value}"><output>${fmt(value)}</output></span></label>`;
 const toggle=(id,label,on)=>`<label class="toggle">${label}<input type="checkbox" id="set-${id}" ${on?'checked':''}><i></i></label>`;
-export function settingsPanel(s,tab='graphics'){
+export function settingsPanel(s,tab='graphics',{hz=0}={}){
   const tabs=[['graphics','GRAPHICS'],['audio','AUDIO'],['controls','CONTROLS'],['game','GAMEPLAY']];
   let body='';
   if(tab==='graphics')body=`<label>QUALITY${seg('quality',[['low','Low'],['medium','Medium'],['high','High'],['ultra','Ultra']],s.quality)}</label>
     <label>FRAME RATE CAP${seg('fpsCap',FPS_CAPS.map(v=>[v,v?v:'Unlimited']),s.fpsCap)}</label>
     ${slider('renderScale','RENDER SCALE',s.renderScale,.5,1.5,.05,v=>`${Math.round(v*100)}%`)}
     ${toggle('shadows','Shadows (High/Ultra)',s.shadows)}${toggle('weather','Falling snow, leaves and embers',s.weather)}${toggle('showFps','Show FPS and ping',s.showFps)}
-    <p class="fine">Unlimited follows your monitor (144 / 240 Hz). Antialiasing changes on Low apply after a reload.</p>`;
+    <div class="hz ${hz&&hz<=75?'warn':''}"><b>${hz?`Your browser is giving the game ${hz} frames per second`:'Measuring your display…'}</b>${hz&&hz<50?'<p>That is below a normal display rate, so the graphics card is the limit right now: try Medium or Low quality, turn shadows off or lower the render scale.</p>':''}${hz&&hz<=75&&hz>=50?`<p>Browsers can only draw as fast as the display refreshes, so a game can’t go past this from a web page. To get 144 / 240 FPS:</p><ol><li>Windows: <em>Settings → System → Display → Advanced display</em> → set the refresh rate to 144 / 240 Hz (macOS: <em>Displays → Refresh rate</em>).</li><li>Keep the browser window on the high-refresh monitor.</li><li>Chrome / Edge: turn <em>Energy / Efficiency saver</em> off and <em>Use graphics acceleration</em> on (Settings → System), then restart the browser.</li><li>Laptops: plug in power and use the high-performance GPU for the browser.</li></ol>`:hz?'<p>Unlimited follows this rate. Lower the cap only if you want to save power.</p>':''}</div>
+    <p class="fine">Antialiasing changes on Low apply after a reload.</p>`;
   if(tab==='audio')body=`${slider('master','MASTER',s.master,0,1,.05,v=>`${Math.round(v*100)}`)}${slider('music','MUSIC',s.music,0,1,.05,v=>`${Math.round(v*100)}`)}${slider('sfx','EFFECTS',s.sfx,0,1,.05,v=>`${Math.round(v*100)}`)}${toggle('muted','Mute everything',s.muted)}`;
   if(tab==='controls')body=`${slider('sens','MOUSE / STICK SENSITIVITY',s.sens,.1,4,.05,v=>Number(v).toFixed(2))}${slider('aimSens','AIM (RIGHT-CLICK) SENSITIVITY',s.aimSens,.2,1,.05,v=>Number(v).toFixed(2))}${slider('fov','FIELD OF VIEW',s.fov,55,100,1,v=>`${v}°`)}
     ${toggle('invertY','Invert look up/down',s.invertY)}${toggle('toggleCrouch','Toggle crouch instead of hold',s.toggleCrouch)}${toggle('toggleSprint','Toggle sprint instead of hold',s.toggleSprint)}${toggle('aimAssist','Aim assist (touch & gamepad)',s.aimAssist)}
@@ -92,7 +94,7 @@ export function pausePanel(){
 }
 export function errorPanel(text){return panel('error','Let’s try that again',`<p>${esc(text)}</p>${btn('confirm-leave','BACK TO MENU','big-go')}`,{sub:'A LITTLE BUMP'});}
 const AWARD={mvp:['MVP','most splats'],sharpshooter:['SHARPSHOOTER','best accuracy'],architect:['ARCHITECT','most walls built'],streak:['ON FIRE','longest streak'],untouchable:['UNTOUCHABLE','fewest hits taken']};
-export function results(state,mySlot,{coins,xp,solo}){
+export function results(state,mySlot,{coins,xp,solo,note}){
   const mine=state.results.find(r=>r.slot===mySlot),team=state.mode!=='ffa';
   const tied=!team&&mine&&state.results.filter(r=>r.score===mine.score).length>1;
   const head=!mine?'Match over':mine.draw?'A perfect tie!':mine.place===1?(team?'Your team wins!':tied?(mine.score?'Tied for first!':'Nobody scored!'):'VICTORY!'):team?'So close.':`#${mine.place} — well splatted.`;
@@ -100,7 +102,7 @@ export function results(state,mySlot,{coins,xp,solo}){
   return `<div class="results-wrap"><section class="results ${mine?.place===1?'win':''}"><small class="kicker">${team?(state.mode==='king'?'KING OF THE HILL':'TEAM PELT'):'FREE-FOR-ALL'} · RESULTS</small><h2>${head}</h2>
     <ol class="standings">${(()=>{const top=state.results.slice(0,6);const mineRow=state.results.find(r=>r.slot===mySlot);if(mineRow&&!top.includes(mineRow))top.push(mineRow);return top;})().map(r=>`<li class="${r.slot===mySlot?'me':''} ${team?'team'+r.team:''}"><span class="place">${r.place}</span><b>${esc(r.name)}${r.bot?' <small>BOT</small>':''}</b><span class="stat">${r.stat?.hits??0}/${r.stat?.throws??0} hits</span><strong>${r.score}</strong></li>`).join('')}</ol>
     <div class="awards">${awards}</div>
-    <div class="earned"><span>◈ +${coins}<small>coins</small></span><span>★ +${xp}<small>XP</small></span></div>
+    <div class="earned"><span>◈ +<b id="earn-coins">${coins}</b><small>coins</small></span><span>★ +<b id="earn-xp">${xp}</b><small>XP</small></span></div><p class="earn-note" id="earn-note">${note||''}</p>
     <div class="actions">${solo?btn('rematch','PLAY AGAIN ▸','big-go'):'<p class="fine">Next round starts in the lobby shortly…</p>'}${btn('confirm-leave','MENU','wide-btn')}</div></section></div>`;
 }
 export function lobby(state,mySlot,{copyText}){
@@ -119,4 +121,48 @@ export function touchControls(){
   return `<div id="touch"><div id="move-zone"><div class="stick"><span></span></div></div><div id="look-zone"></div>
     <div class="tbtns">${['throw:THROW','dive:DIVE','wall:WALL','scoop:SCOOP','crouch:CROUCH'].map(s=>{const [k,l]=s.split(':');return `<button class="tb tb-${k}" data-touch="${k}" aria-label="${l}">${l}</button>`;}).join('')}</div>
     <button class="tb tb-pause" data-action="pause" aria-label="Pause">❚❚</button></div>`;
+}
+
+export function accountPanel({mode='login',view=null,busy=false}){
+  if(view){const l=view.life||{};return panel('account',`@${esc(view.display)}`,`
+    <div class="acct-stats"><div><b>${view.level}</b><small>LEVEL</small></div><div><b>◈ ${view.coins}</b><small>COINS</small></div><div><b>${l.wins||0}</b><small>WINS</small></div><div><b>${l.splats||0}</b><small>SPLATS</small></div><div><b>${l.matches||0}</b><small>MATCHES</small></div><div><b>${l.best||0}</b><small>BEST STREAK</small></div></div>
+    <p class="fine">Your coins, unlocks, look and challenge progress are saved to this account and follow you to any device.</p>
+    ${btn('challenges','CHALLENGES ▸','big-go')}
+    <details class="pw"><summary>Change password</summary><label>CURRENT<input id="pw-current" type="password" autocomplete="current-password"></label><label>NEW<input id="pw-next" type="password" autocomplete="new-password"></label>${btn('acct-password','UPDATE PASSWORD','wide-btn')}</details>
+    ${btn('acct-logout','LOG OUT','wide-btn danger')}`,{sub:'YOUR ACCOUNT'});}
+  const reg=mode==='register';
+  return panel('account',reg?'Create your account':'Welcome back',`
+    <div class="tabs">${btn('acct-mode:login','LOG IN',reg?'':'on')}${btn('acct-mode:register','SIGN UP',reg?'on':'')}</div>
+    <form class="acct-form" data-form="${reg?'register':'login'}" onsubmit="return false">
+      <label>USERNAME<input id="acct-user" maxlength="16" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="3–16 letters, numbers or _"></label>
+      <label>PASSWORD<input id="acct-pass" type="password" maxlength="72" autocomplete="${reg?'new-password':'current-password'}" placeholder="at least 6 characters"></label>
+      ${reg?'<label>CONFIRM PASSWORD<input id="acct-pass2" type="password" maxlength="72" autocomplete="new-password"></label>':''}
+      ${btn(reg?'acct-register':'acct-login',busy?'…':reg?'CREATE ACCOUNT ▸':'LOG IN ▸','big-go')}
+    </form>
+    <ul class="perks"><li>◈ <b>150 welcome coins</b></li><li>🎯 Daily &amp; weekly challenges with coin rewards</li><li>🏆 Achievements that unlock exclusive hats</li><li>🔥 Daily login streak bonus</li><li>☁️ Progress saved on every device · global ranks</li></ul>
+    <p class="fine">Guest progress stays on this device and is not moved into an account. Don’t reuse a password from another site.</p>`,{sub:reg?'FREE · NO EMAIL NEEDED':'SIGN IN'});
+}
+const until=t=>{const ms=Math.max(0,t-Date.now()),h=Math.floor(ms/3600000),m=Math.floor(ms/60000)%60;return h>=24?`${Math.floor(h/24)}d ${h%24}h`:`${h}h ${m}m`;};
+function challengeRow(c,signedIn){
+  const pct=Math.round(Math.min(1,c.progress/c.goal)*100),done=c.progress>=c.goal;
+  return `<div class="ch ${c.claimed?'claimed':done?'ready':''}"><div class="ch-main"><b>${esc(c.text)}</b><span class="bar"><i style="width:${pct}%"></i></span><small>${Math.min(c.progress,c.goal)} / ${c.goal}</small></div>
+    <div class="ch-reward">${c.claimed?'<span class="done">✓ CLAIMED</span>':done&&signedIn?btn(`claim:${c.id}`,`CLAIM ◈${c.coins}`,'claim'):`<span>◈ ${c.coins}${c.xp?` · ${c.xp} XP`:''}${c.hat?' · 🎩':''}</span>`}</div></div>`;
+}
+export function challengesPanel(view){
+  const now=Date.now(),signedIn=!!view;
+  const fake=list=>list.map(c=>({...c,progress:0,claimed:false}));
+  const daily=view?.daily||fake(dailyFor(now)),weekly=view?.weekly||fake(weeklyFor(now)),ach=view?.achievements||fake(ACHIEVEMENTS);
+  const streak=view?.streak;
+  return panel('challenges','Challenges',`
+    ${signedIn?`<div class="streak ${streak.ready?'ready':''}"><div><b>🔥 Daily bonus · day ${streak.ready?Math.min(7,(streak.count||0)+1):streak.count}</b><small>${streak.ready?'Log in every day for bigger bonuses.':'Come back tomorrow to keep the streak.'}</small></div>${streak.ready?btn('claim:streak',`CLAIM ◈${streak.next}`,'claim'):'<span class="done">✓</span>'}</div>`
+      :`<div class="locked-note"><b>Sign up to earn these rewards.</b> Challenges, coins and unlocks are saved to your account.${btn('account','SIGN IN / UP ▸','claim')}</div>`}
+    <h4>DAILY · RESETS IN ${until(view?.resets?.daily||(Math.floor(now/86400000)+1)*86400000)}</h4><div class="ch-list">${daily.map(c=>challengeRow(c,signedIn)).join('')}</div>
+    <h4>WEEKLY · RESETS IN ${until(view?.resets?.weekly||now+7*86400000)}</h4><div class="ch-list">${weekly.map(c=>challengeRow(c,signedIn)).join('')}</div>
+    <h4>ACHIEVEMENTS</h4><div class="ch-list">${ach.map(c=>challengeRow(c,signedIn)).join('')}</div>
+    <p class="fine">Online matches count in full. Bot matches count too, with a daily coin cap${view?` (◈ ${view.solo?.coinsLeft??0} left today)`:''}.</p>`,{sub:'GOALS · COINS · UNLOCKS',wide:true});
+}
+export function leaderboardPanel(rows,error,me){
+  const body=error?`<p class="fine">${esc(error)}</p>`:!rows?'<div class="spinner"></div>':!rows.length?'<p class="fine">No ranked players yet. Be the first!</p>'
+    :`<table class="ranks"><tr><th>#</th><th>PLAYER</th><th>LVL</th><th>WINS</th><th>SPLATS</th></tr>${rows.map((r,i)=>`<tr class="${me&&r.display.toLowerCase()===me.toLowerCase()?'me':''}"><td>${i+1}</td><td><i style="background:${CHARACTERS.find(c=>c.id===r.character)?.color||'#fff'}"></i>${esc(r.display)}</td><td>${r.level}</td><td>${r.wins}</td><td>${r.splats}</td></tr>`).join('')}</table>`;
+  return panel('leaderboard','Global ranks',body+(me?'':'<p class="fine">Sign in to appear on the board.</p>'),{sub:'TOP PLAYERS BY XP',wide:true});
 }

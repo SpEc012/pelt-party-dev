@@ -1,14 +1,14 @@
 import {decodeWorld} from '../shared/protocol.mjs';
 export function profileToken(){let token;try{token=localStorage.getItem('pelt-token');}catch{}if(!/^[a-f0-9]{64}$/.test(token||'')){token=[...crypto.getRandomValues(new Uint8Array(32))].map(v=>v.toString(16).padStart(2,'0')).join('');try{localStorage.setItem('pelt-token',token);}catch{}}return token;}
 export async function api(path,data){let response;try{response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}catch{throw Error('The multiplayer server is unavailable. You can still play vs bots.');}let result;try{result=await response.json();}catch{throw Error('The multiplayer server is not set up here yet. Try Play vs bots.');}if(!response.ok)throw Error(result.error||'Could not reach that room.');return result;}
-export function connect({code,name,character,hat,watch=false,token,onMessage,onStatus,onError}){
+export function connect({code,name,character,hat,watch=false,token,accountToken=null,onMessage,onStatus,onError}){
   let ws,closed=false,attempt=0,timer,ping,clockTimer,opened=false,lostAt=0,samples=[],offset=0,rtt=0,jitter=0,bytes=0,windowBytes=0,measuredAt=performance.now(),downKB=0;
   const q=new URLSearchParams(location.search),lag=Math.max(0,Math.min(1000,Number(q.get('lag'))||0)),spread=Math.max(0,Math.min(300,Number(q.get('jitter'))||0)),loss=Math.max(0,Math.min(50,Number(q.get('loss'))||0));
   const pending=new Set();const deliver=(fn,drop=false)=>{if(drop&&Math.random()*100<loss)return;if(!lag&&!spread){fn();return;}const t=setTimeout(()=>{pending.delete(t);if(!closed)fn();},Math.max(0,lag+(Math.random()-.5)*spread*2));pending.add(t);};
   function open(){
     if(closed)return;
     const url=new URL(`/ws/${code}`,location.origin);url.protocol=location.protocol==='https:'?'wss:':'ws:';url.search=new URLSearchParams({name,character,hat,watch:watch?'1':'0'});
-    ws=new WebSocket(url,['tok.'+token]);ws.binaryType='arraybuffer';onStatus('connecting');
+    ws=new WebSocket(url,['tok.'+token,...(accountToken?['acct.'+accountToken]:[])]);ws.binaryType='arraybuffer';onStatus('connecting');
     ws.onopen=()=>{opened=true;attempt=0;lostAt=0;onStatus('online');send({t:'hi'});let count=0;const clock=()=>{send({t:'clk',c:Date.now()});clockTimer=setTimeout(clock,++count<8?250:3000);};clock();ping=setInterval(()=>send({t:'ping'}),25000);};
     ws.onmessage=e=>{
       const n=typeof e.data==='string'?new TextEncoder().encode(e.data).length:e.data.byteLength;bytes+=n;windowBytes+=n;const at=performance.now();if(at-measuredAt>1000){downKB=windowBytes/(at-measuredAt);windowBytes=0;measuredAt=at;}

@@ -38,7 +38,7 @@ export class Room {
     let slot=0;while(this.players.some(p=>p.slot===slot))slot++;
     if(slot>29)throw Error('This room is full.');
     const team=this.active.filter(p=>p.team===0).length<=this.active.filter(p=>p.team===1).length?0:1;
-    const p={slot,name,character:CHARACTER_IDS.includes(character)?character:'pip',hat:HAT_IDS.includes(hat)?hat:'none',bot,spectator,connected:true,ready:false,team,fill:false,...spawnPoint(this.active.length,this.map),facing:0,score:0,streak:0,multi:0,lastSplat:0,lastBy:-1,nextThrow:0,nextThink:0,disconnectedAt:0,stat:{throws:0,hits:0,taken:0,built:0,splats:0,best:0}};
+    const p={slot,name,character:CHARACTER_IDS.includes(character)?character:'pip',hat:HAT_IDS.includes(hat)?hat:'none',bot,spectator,connected:true,ready:false,team,fill:false,...spawnPoint(this.active.length,this.map),facing:0,score:0,streak:0,multi:0,lastSplat:0,lastBy:-1,nextThrow:0,nextThink:0,disconnectedAt:0,stat:{throws:0,hits:0,taken:0,built:0,splats:0,best:0,dodges:0,powers:0,bigs:0}};
     this.fresh(p,now);
     if(this.phase==='playing'&&!spectator){Object.assign(p,this.spawnFor(p,now));p.team=team;}
     this.players.push(p);if(this.host===null&&!bot&&!spectator)this.host=slot;
@@ -69,7 +69,7 @@ export class Room {
     this.map=makeMap(this.mapId,this.active.length);this.pelts=[];this.forts=[];this.seen.clear();this.results=[];this.totalSplats=0;
     this.pads=this.map.pads.map((p,i)=>({...p,kind:POWER_IDS[(i+this.round)%POWER_IDS.length],readyAt:this.startAt+8000}));
     if(this.publicRoom&&this.active.length>=9)this.mode='team';
-    this.active.forEach((p,i)=>{this.fresh(p,now);Object.assign(p,spawnPoint(i,this.map),{team:i%2,score:0,streak:0,multi:0,lastSplat:0,lastBy:-1,ready:false,fill:false,spawnSafeUntil:this.startAt+RULES.spawnShield,facing:i%2?-Math.PI/2:Math.PI/2,stat:{throws:0,hits:0,taken:0,built:0,splats:0,best:0}});});
+    this.active.forEach((p,i)=>{this.fresh(p,now);Object.assign(p,spawnPoint(i,this.map),{team:i%2,score:0,streak:0,multi:0,lastSplat:0,lastBy:-1,ready:false,fill:false,spawnSafeUntil:this.startAt+RULES.spawnShield,facing:i%2?-Math.PI/2:Math.PI/2,stat:{throws:0,hits:0,taken:0,built:0,splats:0,best:0,dodges:0,powers:0,bigs:0}});});
     this.startedHumans=this.humans.length;this.lastKing=this.startAt;this.lastStep=now;this.broadcast(now);
   }
   command(slot,m,now){
@@ -145,13 +145,13 @@ export class Room {
     if(!sweptHit(a,b,victim,.9))return false;
     // Check the entire ballistic path so a delayed report cannot pass through cover.
     for(let t=shot.release;t<m.tm;t+=25){if(firstCover(peltAt(shot,t),peltAt(shot,Math.min(t+25,m.tm)),this.cover))return false;}
-    if(victim.diveSafeUntil>m.tm){this.fx({kind:'dodge',slot:victim.slot,x:victim.x,z:victim.z});return false;}
+    if(victim.diveSafeUntil>m.tm){if(!this.seen.has('dodge:'+shot.id)){this.seen.set('dodge:'+shot.id,now);victim.stat.dodges++;}this.fx({kind:'dodge',slot:victim.slot,x:victim.x,z:victim.z});return false;}
     this.damage(victim,by,shot.charge?2:1,now,shot);this.impact(shot,b,now,victim.slot);return true;
   }
   damage(victim,by,n,now,shot){
     if(victim.respawnAt||victim.spawnSafeUntil>now||victim.diveSafeUntil>now)return;
     if(victim.shieldUntil>now){this.fx({kind:'block',slot:victim.slot,by:by.slot,x:victim.x,z:victim.z});return;}
-    victim.hp=Math.max(0,victim.hp-n);victim.stat.taken+=n;by.stat.hits++;victim.scooping=false;
+    victim.hp=Math.max(0,victim.hp-n);victim.stat.taken+=n;by.stat.hits++;if(shot?.charge)by.stat.bigs++;victim.scooping=false;
     const dx=victim.x-(shot?.x??by.x),dz=victim.z-(shot?.z??by.z),d=Math.hypot(dx,dz)||1;victim.knockUntil=now+450;
     if(victim.bot){victim.kx=dx/d*7;victim.kz=dz/d*7;}
     this.fx({kind:'hit',slot:victim.slot,x:victim.x,z:victim.z,by:by.slot,dx:dx/d,dz:dz/d,n,hp:victim.hp});
@@ -235,7 +235,7 @@ export class Room {
     const kind=pad.kind;
     if(kind==='heal'&&p.hp>=RULES.hp)return;
     if(kind==='triple')p.triple=3;if(kind==='shield')p.shieldUntil=now+RULES.shieldTime;if(kind==='heal')p.hp=RULES.hp;if(kind==='giga'){p.giga=true;p.ammo=Math.max(p.ammo,2);}if(kind==='rush'){p.rushUntil=now+RULES.rushTime;p.dives=RULES.diveCharges;p.diveAt=0;}
-    const options=POWER_IDS.filter(k=>k!==kind);pad.kind=options[Math.floor(this.random()*options.length)];pad.readyAt=now+RULES.padRespawn;
+    p.stat.powers++;const options=POWER_IDS.filter(k=>k!==kind);pad.kind=options[Math.floor(this.random()*options.length)];pad.readyAt=now+RULES.padRespawn;
     this.stats(p);this.emit({t:'pads',round:this.round,pads:this.pads});this.fx({kind:'power',power:kind,slot:p.slot,x:pad.x,z:pad.z});
   }
   // Bots play by the same rules as people: they move, dive, build, scoop and must have ammo.
@@ -297,7 +297,7 @@ export class Room {
     const awards=[award('mvp',p=>p.stat.splats),award('sharpshooter',p=>p.stat.throws>=5?p.stat.hits/p.stat.throws:0,.01),award('architect',p=>p.stat.built),award('streak',p=>p.stat.best,3),award('untouchable',p=>-p.stat.taken,-Infinity)].filter(Boolean);
     this.results=ordered.map((p,i)=>{
       const place=teamGame?(draw||totals[p.team]>totals[1-p.team]?1:2):i+1;
-      return {slot:p.slot,name:p.name,bot:p.bot,character:p.character,score:p.score,team:p.team,teamScore:totals[p.team],draw,place,stat:{...p.stat},coins:payout({splats:p.score,place:draw?2:place,bots:this.active.some(p=>p.bot),players:this.active.length})};
+      return {slot:p.slot,name:p.name,bot:p.bot,account:!!p.account,character:p.character,score:p.score,team:p.team,teamScore:totals[p.team],draw,place,stat:{...p.stat},coins:payout({splats:p.score,place:draw?2:place,bots:this.active.some(p=>p.bot),players:this.active.length})};
     });this.awards=awards;this.broadcast(now);
   }
   save(){return JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(this).filter(([k])=>!['emit','random','seen'].includes(k)))));}

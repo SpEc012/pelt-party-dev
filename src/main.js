@@ -10,6 +10,7 @@ import {clamp,moveBody,peltAt,sweptHit,makePelt,rateFor,onIce,flightEnd} from '.
 import {relativeMove,driveVelocity,diveSpeed,slideSpeed,cameraBasis} from '../shared/controller.mjs';
 import {RemoteTrack,CODE,safeName,flagsOf} from '../shared/protocol.mjs';
 import {connect,api,profileToken} from './network.js';
+import * as Acct from './account.js';
 
 const $=s=>document.querySelector(s),app=$('#app'),hudRoot=$('#hud-root'),canvas=$('#world');
 const params=new URLSearchParams(location.search),token=profileToken(),testMode=params.get('test')==='1',touch=matchMedia('(pointer: coarse)').matches||params.has('touch');
@@ -24,8 +25,14 @@ function loadProfile(){
     coins:Number.isFinite(s.coins)?Math.max(0,Math.floor(s.coins)):60,owned:list(s.owned,['none','beanie']),ownedChars:list(s.ownedChars,CHARACTERS.filter(c=>!c.price).map(c=>c.id)),
     xp:Number.isFinite(s.xp)?Math.max(0,s.xp):0,matches:s.matches|0,wins:s.wins|0,splats:s.splats|0,last:{map:'commons',mode:'ffa',size:8,difficulty:'regular',...(s.last||{})}};
 }
-let profile=loadProfile();
-const persist=()=>{try{localStorage.setItem('pelt-profile',JSON.stringify(profile));}catch{toast('Progress cannot be saved in this browser session.');}};
+// Guest progress lives on this device; a signed-in profile mirrors the server's view.
+const guest=loadProfile();let profile=guest;
+const persist=()=>{if(profile!==guest)guest.last=profile.last;try{localStorage.setItem('pelt-profile',JSON.stringify(guest));}catch{toast('Progress cannot be saved in this browser session.');}};
+function useAccount(view){
+  if(!view){profile=guest;return;}
+  profile={...guest,name:view.display,character:view.character,hat:view.hat,coins:view.coins,owned:view.owned,ownedChars:view.ownedChars,xp:view.xp,matches:view.life?.matches|0,wins:view.life?.wins|0,splats:view.life?.splats|0,last:profile.last||guest.last,account:view.username};
+}
+useAccount(Acct.session.view);
 function toast(text){const t=$('#toast');t.textContent=text;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),3600);}
 
 /* -------------------------------------------------------------------- world */
@@ -34,7 +41,7 @@ try{world=new World(canvas,settings);}catch(error){app.innerHTML='<main class="u
 
 /* ------------------------------------------------------------ session state */
 let screen='menu',panel=null,lockerTab='characters',settingsTab='graphics',demo=null,room=null,wire=null,state=null,mySlot=-1,status='local',hud=null,paused=false,soloTime=0,phaseSeen='',results=null;
-let local=null,tracks=new Map(),poses=new Map(),hitSent=new Map(),keys=new Set(),aim={x:0,z:0,y:0},chargeAt=0,chargeReadyPlayed=false,aiming=false,lastShot=0,shotCounter=0,lastSnap=0,scoopOn=false,crouchToggle=false,sprintToggle=false,wasDead=false,killer='',frenzyOn=false,boardOn=false,hintUntil=0,fps=0,frames=0,fpsAt=0,lastFrame=performance.now(),lastRender=0,pendingOnline=false;
+let local=null,tracks=new Map(),poses=new Map(),hitSent=new Map(),keys=new Set(),aim={x:0,z:0,y:0},chargeAt=0,chargeReadyPlayed=false,aiming=false,lastShot=0,shotCounter=0,lastSnap=0,scoopOn=false,crouchToggle=false,sprintToggle=false,wasDead=false,killer=null,frenzyOn=false,boardOn=false,hintUntil=0,fps=0,frames=0,fpsAt=0,lastFrame=performance.now(),lastRender=0,pendingOnline=false;
 let moveStick={x:0,y:0},padPrev=[],winners=new Set();
 const now=()=>room?soloTime:wire?wire.now():Date.now();
 const me=()=>state?.players.find(p=>p.slot===mySlot);
@@ -43,32 +50,38 @@ const limitFor=(mode,n)=>mode==='ffa'?Math.min(25,10+n):mode==='king'?120:Math.m
 /* --------------------------------------------------------------- menu demo */
 function startDemo(){
   const ids=MAPS.map(m=>m.id),map=ids[Math.floor(Math.random()*ids.length)],t=Date.now();
-  demo=new Room({season,map,now:t,emit:m=>{if(m.t==='fx'&&screen!=='play')world.fx(m);}});demo.botsTo(8,t,'regular');demo.start(t-4000);demo.step(t);
+  demo=new Room({season,map,now:t,emit:m=>{if(m.t!=='fx'||screen==='play')return;world.fx(m);if(m.kind==='splat'&&demo){const v=demo.players.find(p=>p.slot===m.slot),k=demo.players.find(p=>p.slot===m.by);if(v)world.ragdoll(m.slot,v,k);}}});demo.botsTo(8,t,'regular');demo.start(t-4000);demo.step(t);
   world.clearActors();world.sync(demo,-1);world.cameraReady=false;world.hero(profile);
 }
+const menuHtml=()=>UI.menu({profile,season,muted:settings.muted,badge:Acct.claimable(Acct.session.view)});
+function refreshMenu(){if(screen==='menu'&&!panel)app.innerHTML=menuHtml();}
 function showMenu(){
   screen='menu';panel=null;document.body.className=`menu-screen s-${season}`;hudRoot.innerHTML='';hud=null;
   if(!demo||demo.season!==season)startDemo();world.mode='menu';world.hero(profile);
-  app.innerHTML=UI.menu({profile,season,muted:settings.muted});sound.music('menu',season);
+  app.innerHTML=menuHtml();sound.music('menu',season);
 }
 function openPanel(kind){
   panel=kind;document.exitPointerLock?.();$('#panel')?.remove();const wrap=document.createElement('div');wrap.id='panel';
   if(kind==='play')wrap.innerHTML=UI.playSetup(profile.last);
   if(kind==='join')wrap.innerHTML=UI.joinPanel(profile.name);
-  if(kind==='settings')wrap.innerHTML=UI.settingsPanel(settings,settingsTab);
+  if(kind==='settings')wrap.innerHTML=UI.settingsPanel(settings,settingsTab,{hz:refreshHz()});
   if(kind==='how')wrap.innerHTML=UI.howPanel(touch);
   if(kind==='vault')wrap.innerHTML=UI.vaultPanel(season);
   if(kind==='pause')wrap.innerHTML=UI.pausePanel();
   if(kind==='error')wrap.innerHTML=UI.errorPanel(openPanel.error||'Something went wrong.');
+  if(kind==='account')wrap.innerHTML=UI.accountPanel({mode:openPanel.mode||'login',view:Acct.signedIn()?Acct.session.view:null});
+  if(kind==='challenges')wrap.innerHTML=UI.challengesPanel(Acct.signedIn()?Acct.session.view:null);
+  if(kind==='leaderboard'){wrap.innerHTML=UI.leaderboardPanel(null,null,profile.account&&profile.name);Acct.leaderboard().then(rows=>{if(panel==='leaderboard')$('#panel').innerHTML=UI.leaderboardPanel(rows,null,profile.account&&profile.name);}).catch(e=>{if(panel==='leaderboard')$('#panel').innerHTML=UI.leaderboardPanel(null,e.message,profile.account&&profile.name);});}
   if(kind==='locker'){wrap.innerHTML=UI.locker(profile,lockerTab);world.mode='hero';world.hero(profile);document.body.classList.add('locker-open');}
   app.append(wrap);wrap.querySelector('input:not([type=range]):not([type=checkbox])')?.focus();
 }
 function closePanel(){
   const was=panel;panel=null;$('#panel')?.remove();
-  if(was==='locker'){document.body.classList.remove('locker-open');commitName();world.mode=screen==='play'?'play':'menu';if(screen==='menu')app.innerHTML=UI.menu({profile,season,muted:settings.muted});}
+  if(was==='locker'){document.body.classList.remove('locker-open');commitName();world.mode=screen==='play'?'play':'menu';}
+  if(['locker','account','challenges'].includes(was))refreshMenu();
   if(screen==='play'&&state?.phase!=='results'){paused=false;if(!touch)lockPointer();}
 }
-function commitName(){const input=$('#name');if(!input)return true;const n=safeName(input.value);if(!n){toast('Pick a nickname with letters and numbers.');return false;}profile.name=n;persist();return true;}
+function commitName(){if(profile.account)return true;const input=$('#name');if(!input)return true;const n=safeName(input.value);if(!n){toast('Pick a nickname with letters and numbers.');return false;}profile.name=n;persist();return true;}
 
 /* ------------------------------------------------------------ match control */
 function resetSession(){
@@ -85,7 +98,7 @@ function startSolo(size=8,difficulty='regular',map='commons',mode='ffa'){
 function openRoom(code,watch=false){
   stop();screen='connecting';status='connecting';document.body.className=`lobby-screen s-${season}`;app.innerHTML=UI.connecting(code);
   try{sessionStorage.setItem('pelt-room',JSON.stringify({code,watch}));}catch{}
-  wire=connect({code,name:profile.name,character:profile.character,hat:profile.hat,watch,token,onMessage:onEvent,onStatus:s=>{status=s;},onError:e=>{openPanel.error=e;openPanel('error');}});
+  wire=connect({code,name:profile.name,character:profile.character,hat:profile.hat,watch,token,accountToken:Acct.session.token,onMessage:onEvent,onStatus:s=>{status=s;},onError:e=>{openPanel.error=e;openPanel('error');}});
   history.pushState({match:true},'',`?room=${code}`);
 }
 function enterMatch(){
@@ -112,9 +125,27 @@ function finishMatch(){
   document.exitPointerLock?.();chargeAt=0;aiming=false;
   const mine=state.results.find(r=>r.slot===mySlot),first=state.results.filter(r=>r.place===1).map(r=>r.slot);winners=new Set(first);
   const key=`${state.code}-${state.round}-${state.startAt}`;let coins=0,xp=0;
-  if(mine&&results!==key){results=key;coins=mine.coins;xp=25+mine.score*12+(mine.place===1?40:0);profile.coins+=coins;profile.xp+=xp;profile.matches++;profile.splats+=mine.score;if(mine.place===1&&!mine.draw)profile.wins++;persist();}
+  const fresh=mine&&results!==key;let note='';
+  if(fresh&&!profile.account){results=key;coins=mine.coins;xp=25+mine.score*12+(mine.place===1?40:0);profile.coins+=coins;profile.xp+=xp;profile.matches++;profile.splats+=mine.score;if(mine.place===1&&!mine.draw)profile.wins++;persist();note='Playing as a guest. <button class="link" data-action="account">Sign up</button> to save progress and earn challenge rewards.';}
+  if(fresh&&profile.account){results=key;coins='…';xp='…';note='Saving to your account…';settleAccount(mine,key);}
   sound.music(null);sound.play(mine?.place===1?'win':'lose');
-  document.body.classList.add('results-screen');const wrap=document.createElement('div');wrap.id='results';wrap.innerHTML=UI.results(state,mySlot,{coins,xp,solo:!!room});app.append(wrap);
+  document.body.classList.add('results-screen');const wrap=document.createElement('div');wrap.id='results';wrap.innerHTML=UI.results(state,mySlot,{coins,xp,solo:!!room,note});app.append(wrap);
+}
+
+// Signed-in rewards come from the server: solo reports are capped, online results arrive from the room itself.
+async function settleAccount(mine,key){
+  const show=(coins,xp,note)=>{const c=$('#earn-coins'),x=$('#earn-xp'),n=$('#earn-note');if(c)c.textContent=coins;if(x)x.textContent=xp;if(n)n.innerHTML=note;};
+  const before=Acct.claimable(Acct.session.view);
+  try{
+    let earned;
+    if(room){const n=state.active.length;const r=await Acct.reportMatch({...mine.stat,place:mine.place,win:mine.place===1&&!mine.draw,draw:mine.draw,players:n});earned=r.earned;}
+    else{const want=`${state.code}:${state.round}:${state.startAt}`;for(let i=0;i<6;i++){await new Promise(r=>setTimeout(r,900));const r=await Acct.refresh();if(r.profile.lastAward?.key===want){earned=r.profile.lastAward;break;}}}
+    useAccount(Acct.session.view);const ready=Acct.claimable(Acct.session.view);
+    if(!earned){show(0,0,'Saved. Rewards will appear on your account shortly.');return;}
+    const extra=earned.skipped==='too-soon'?'Bot matches less than a minute apart don’t pay out.':earned.coins===0&&room?'Daily bot-match coin cap reached — online matches still pay.':'';
+    show(earned.coins,earned.xp,`${earned.levels?`<b>LEVEL UP!</b> +◈${earned.levels*50} · `:''}Saved to @${UI.esc(profile.name)}. ${ready>before?`<button class="link" data-action="challenges">${ready} reward${ready>1?'s':''} ready to claim ▸</button>`:''} ${extra}`);
+    if(earned.levels)sound.play('callout');
+  }catch(e){show(0,0,UI.esc(e.message));}
 }
 
 /* ------------------------------------------------------------- net events */
@@ -159,9 +190,10 @@ function onFx(m){
       if(m.slot===mySlot){sound.play('hurt');world.hurt(.3);if(local){local.kx=(m.dx||0)*6;local.kz=(m.dz||0)*6;}const b=cameraBasis(world.yaw),ang=Math.atan2(-(m.dx||0)*b.rx-(m.dz||0)*b.rz,-(m.dx||0)*b.fx-(m.dz||0)*b.fz);hud?.damage(ang);}
       else if(m.by!==mySlot)sound.play('impact',{pan,vol});break;
     case 'splat':
+      world.ragdoll(m.slot,poses.get(m.slot)||{x:m.x,z:m.z},poses.get(m.by)||by);
       hud?.killfeed(by,victim,m.by===mySlot||m.slot===mySlot);
       if(m.by===mySlot){hud?.hitmarker(true);sound.play('splat');world.freeze(settings.shake?70:0);world.impulse(.12);for(const c of m.calls||[])setTimeout(()=>{hud?.callout(c,true);sound.play('callout');},120);if(!(m.calls||[]).length)hud?.callout(`SPLATTED ${String(victim?.name||'').toUpperCase()}`);}
-      else if(m.slot===mySlot){sound.play('splatted');killer=by?.name||'';world.hurt(.5);}
+      else if(m.slot===mySlot){sound.play('splatted');killer=by?{name:by.name,character:by.character,streak:m.streak||by.streak||0,hp:by.hp}:null;world.hurt(.5);world.freeze(settings.shake?120:0);}
       else sound.play('impact',{pan,vol:vol*.8});break;
   }
 }
@@ -172,11 +204,20 @@ function volOf(x,z){if(!Number.isFinite(x))return 1;const c=world.camera.positio
 function send(m){if(!state)return;const msg={...m,r:state.round};if(room)room.command(mySlot,msg,now());else wire?.send(msg);}
 async function action(a,el){
   if(a==='close'){closePanel();return;}
+  if(a==='account'||a==='challenges'||a==='leaderboard'){if(screen==='play'&&state?.phase!=='results'&&a!=='challenges')return;openPanel(a);if(a==='challenges'&&Acct.signedIn())Acct.refresh().then(()=>{useAccount(Acct.session.view);if(panel==='challenges')openPanel('challenges');}).catch(()=>{});return;}
+  if(a.startsWith('acct-mode:')){openPanel.mode=a.split(':')[1];openPanel('account');return;}
+  if(a==='acct-login'||a==='acct-register'){
+    const u=$('#acct-user')?.value.trim(),pw=$('#acct-pass')?.value||'';if(a==='acct-register'&&pw!==$('#acct-pass2')?.value){toast('Passwords don’t match.');return;}
+    try{const r=a==='acct-register'?await Acct.register(u,pw):await Acct.login(u,pw);useAccount(r.profile);sound.play('power');toast(a==='acct-register'?`Welcome, ${r.profile.display}! ◈150 to get you started.`:`Welcome back, ${r.profile.display}!`);closePanel();world.hero(profile);refreshMenu();}
+    catch(e){toast(e.message);sound.play('empty');}return;}
+  if(a==='acct-logout'){await Acct.logout();useAccount(null);closePanel();world.hero(profile);refreshMenu();toast('Logged out. Playing as a guest.');return;}
+  if(a==='acct-password'){try{await Acct.changePassword($('#pw-current').value,$('#pw-next').value);toast('Password updated. Other devices were signed out.');openPanel('account');}catch(e){toast(e.message);}return;}
+  if(a.startsWith('claim:')){const id=a.slice(6);el&&(el.disabled=true);try{const r=await Acct.claim(id);useAccount(r.profile);sound.play('power');toast(`+◈${r.claimed.coins}${r.claimed.xp?` · +${r.claimed.xp} XP`:''}${r.claimed.hat?' · new hat unlocked!':''}${r.claimed.levels?' · LEVEL UP!':''}`);if(panel==='challenges')openPanel('challenges');}catch(e){toast(e.message);if(el)el.disabled=false;}return;}
   if(['join','settings','how','vault','locker'].includes(a)){if(a==='locker'&&screen!=='menu')return;openPanel(a);return;}
   if(a==='play'){openPanel('play');return;}
   if(a==='pause'){openPanel('pause');paused=!!room;return;}
   if(a==='resume'){closePanel();return;}
-  if(a==='mute'){settings.muted=!settings.muted;sound.setMuted(settings.muted);saveSettings(settings);if(screen==='menu'&&!panel)app.innerHTML=UI.menu({profile,season,muted:settings.muted});return;}
+  if(a==='mute'){settings.muted=!settings.muted;sound.setMuted(settings.muted);saveSettings(settings);if(screen==='menu'&&!panel)app.innerHTML=menuHtml();return;}
   if(a==='start-solo'){const pick=k=>$(`[data-seg="${k}"] .on`)?.dataset.value;const map=$('.map-card.on')?.dataset.map||'commons';profile.last={map,mode:pick('mode')||'ffa',size:+(pick('size')||8),difficulty:pick('difficulty')||'regular'};persist();startSolo(profile.last.size,profile.last.difficulty,map,profile.last.mode);return;}
   if(a==='create'||a==='quick'){if(pendingOnline)return;pendingOnline=true;toast(a==='quick'?'Finding a match…':'Making a room…');try{const r=await api(a==='quick'?'/api/quick':'/api/rooms',{token,season});openRoom(r.code);}catch(e){toast(e.message);}finally{pendingOnline=false;}return;}
   if(a==='join-room'){if(!commitName())return;const code=$('#code').value.trim().toUpperCase();if(!CODE.test(code)){toast('Use the 4-character code your friend sees.');return;}openRoom(code,$('#watch').checked);return;}
@@ -189,6 +230,10 @@ async function action(a,el){
   if(a.startsWith('season:')){season=a.split(':')[1];closePanel();demo=null;showMenu();return;}
   if(a.startsWith('tab:')){commitName();lockerTab=a.split(':')[1];openPanel('locker');return;}
   if(a.startsWith('stab:')){settingsTab=a.split(':')[1];openPanel('settings');return;}
+  if(profile.account&&(a.startsWith('character:')||a.startsWith('hat:'))){
+    const [kind,id]=a.split(':'),owned=kind==='character'?profile.ownedChars.includes(id):profile.owned.includes(id);
+    try{if(!owned){await Acct.buy(kind,id);const item=(kind==='character'?CHARACTERS:COSMETICS).find(c=>c.id===id);sound.play('power');toast(`Unlocked ${item.name}!`);}
+      const r=await Acct.equip(kind==='character'?{character:id}:{hat:id});useAccount(r.profile);}catch(e){toast(e.message);}openPanel('locker');return;}
   if(a.startsWith('character:')){const id=a.split(':')[1],c=CHARACTERS.find(c=>c.id===id);if(!profile.ownedChars.includes(id)){if(profile.coins<c.price){toast(`Need ◈ ${c.price-profile.coins} more coins. Play a few matches!`);return;}profile.coins-=c.price;profile.ownedChars.push(id);sound.play('power');toast(`Unlocked ${c.name}!`);}commitName();profile.character=id;persist();openPanel('locker');return;}
   if(a.startsWith('hat:')){const id=a.split(':')[1],c=COSMETICS.find(c=>c.id===id);if(!profile.owned.includes(id)){if(profile.coins<c.price){toast(`Need ◈ ${c.price-profile.coins} more coins.`);return;}profile.coins-=c.price;profile.owned.push(id);sound.play('power');toast(`Unlocked ${c.name}!`);}commitName();profile.hat=id;persist();openPanel('locker');return;}
 }
@@ -304,7 +349,7 @@ function bindTouch(){
 function stepLocal(dt,t,p){
   const alive=state.phase==='playing'&&!p.respawnAt&&!p.spectator&&status!=='reconnecting'&&!paused;
   if(p.respawnAt){wasDead=true;return;}
-  if(wasDead){wasDead=false;Object.assign(local,{x:p.x,z:p.z,vx:0,vz:0,kx:0,kz:0,diveStart:0,slideStart:0});world.resetCombat(local);killer='';}
+  if(wasDead){wasDead=false;Object.assign(local,{x:p.x,z:p.z,vx:0,vz:0,kx:0,kz:0,diveStart:0,slideStart:0});world.resetCombat(local);killer=null;}
   const i=moveInput(),gp=pad(),dir=relativeMove(i.x,-i.z,world.yaw),moving=Math.hypot(i.x,i.z)>.1;
   const crouchHeld=settings.toggleCrouch?crouchToggle:(keys.has('KeyC')||keys.has('ControlLeft')||crouchToggle);
   const diving=t<local.diveStart+RULES.diveMove,sliding=!diving&&t<local.slideStart+RULES.slideTime;
@@ -337,8 +382,11 @@ function updatePoses(t){
     else pose=tracks.get(p.slot)?.sample(t)||p;
     poses.set(p.slot,pose);}
 }
+// Measure how often the browser actually gives us frames (its refresh rate) to explain FPS limits.
+const gaps=[];function refreshHz(){if(gaps.length<30)return 0;const g=[...gaps].sort((a,b)=>a-b)[gaps.length>>1];return Math.round(1000/g);}
+let lastTick=0;
 function frame(ts){
-  requestAnimationFrame(frame);
+  requestAnimationFrame(frame);if(lastTick&&!document.hidden){gaps.push(ts-lastTick);if(gaps.length>240)gaps.shift();}lastTick=ts;
   const cap=settings.fpsCap;if(cap&&ts-lastRender<1000/cap-.6)return;
   const raw=(ts-lastFrame)/1000;lastFrame=ts;lastRender=ts;const dt=Math.min(.05,Math.max(0,raw));
   frames++;if(ts-fpsAt>500){fps=Math.round(frames*1000/(ts-fpsAt));frames=0;fpsAt=ts;}
@@ -354,10 +402,10 @@ function frame(ts){
   const frenzy=state?.phase==='playing'&&state.endAt-t<=RULES.frenzy;if(frenzy&&!frenzyOn){frenzyOn=true;hud?.callout('BLIZZARD! FINAL 30',true);sound.play('frenzy');sound.intensity(1);}
   if(state){
     const diving=local&&t<local.diveStart+RULES.diveMove,sliding=local&&t<local.slideStart+RULES.slideTime;
-    world.render(dt,t,{state,poses,mySlot,aim,reduced:settings.reduced,charge:chargeLevel(),aiming,diving,sliding,diveSide:local?.diveSide||0,sprinting:local&&Math.hypot(local.vx,local.vz)>RULES.run+.5,winners,target:world.aimLocked?aim.slot:-1});
+    world.render(dt,t,{state,poses,mySlot,aim,dead:!!p?.respawnAt,reduced:settings.reduced,charge:chargeLevel(),aiming,diving,sliding,diveSide:local?.diveSide||0,sprinting:local&&Math.hypot(local.vx,local.vz)>RULES.run+.5,winners,target:world.aimLocked?aim.slot:-1});
     if(hud&&screen==='play'){
       const n=state.players.filter(q=>!q.spectator).length,rtt=wire?.stats?.rtt;
-      hud.update({state,me:p,time:t,poses,mySlot,yaw:world.yaw,local,charge:chargeLevel(),aiming,locked:world.aimLocked,frenzy,limit:limitFor(state.mode,n),killer,scooping:scoopOn,
+      hud.update({state,me:p,time:t,poses,mySlot,yaw:world.yaw,local,charge:chargeLevel(),aiming,locked:world.aimLocked,frenzy,limit:limitFor(state.mode,n),killerInfo:killer,season:state.season||season,scooping:scoopOn,
         net:settings.showFps?`${fps} FPS${wire?` · ${Math.round(rtt||0)} ms`:''}`:status==='reconnecting'?'RECONNECTING…':wire&&(rtt||0)>220?`SLOW CONNECTION · ${Math.round(rtt)} ms`:''});
       hud.hint(hintText(t,p));
     }
@@ -378,8 +426,10 @@ function lobbyTick(t){
 }
 
 /* ------------------------------------------------------------------- boot */
+world.onLand=(x,z)=>sound.play('boing',{pan:panOf(x,z),vol:volOf(x,z),pitch:.8+Math.random()*.4});
 showMenu();requestAnimationFrame(frame);
+if(Acct.signedIn())Acct.refresh().then(r=>{useAccount(r.profile);refreshMenu();world.hero(profile);}).catch(e=>{if(!Acct.signedIn()){useAccount(null);refreshMenu();toast('Your session ended. Please log in again.');}});
 addEventListener('pointerdown',()=>sound.unlock(),{once:true});
 const deep=params.get('room')?.toUpperCase();if(deep&&CODE.test(deep))openRoom(deep);else{let resume;try{resume=JSON.parse(sessionStorage.getItem('pelt-room')||'null');}catch{}if(resume&&CODE.test(resume.code))openRoom(resume.code,resume.watch);}
 // Test hooks exist only on the explicitly requested local test URL.
-if(testMode)window.__pelt={get world(){return world;},get state(){return state;},get room(){return room;},get local(){return local;},get metrics(){return world.metrics;},get camera(){return {position:world.camera.position.toArray(),yaw:world.yaw,pitch:world.pitch};},get screen(){return screen;},get fps(){return fps;},look(dx,dy){world.look(dx,dy);},startSolo,send,finish(){room?.finish(now());},stop,profile,settings,action,dive,build,throwNow(charged=false){const p=me();if(p)throwAt(charged,now(),p);}};
+if(testMode)window.__pelt={get world(){return world;},get state(){return state;},get room(){return room;},get local(){return local;},get metrics(){return world.metrics;},get camera(){return {position:world.camera.position.toArray(),yaw:world.yaw,pitch:world.pitch};},get screen(){return screen;},get fps(){return fps;},look(dx,dy){world.look(dx,dy);},startSolo,send,finish(){room?.finish(now());},stop,get profile(){return profile;},settings,action,dive,build,throwNow(charged=false){const p=me();if(p)throwAt(charged,now(),p);}};

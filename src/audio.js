@@ -71,7 +71,8 @@ export class Sound {
       case 'hitConfirm': this.osc('square', 1900, 1900, t, .002, .05 * v, .05); this.osc('sine', 2600, 2600, t + .03, .002, .04 * v, .06); this.noise('lowpass', 1400, 300, 1, t, .003, .25 * v, .1); break;
       case 'hurt': this.noise('lowpass', 1200, 150, 1.4, t, .003, .5 * v, .22); this.osc('triangle', 300, 90, t, .004, .18 * v, .2); break;
       case 'splat': this.noise('lowpass', 3000, 140, 1.2, t, .003, .55 * v, .3, undefined, pan); this.osc('sine', 340, 70, t, .004, .22 * v, .3, undefined, pan); [784, 988, 1319].forEach((f, i) => this.osc('triangle', f, f, t + .06 + i * .055, .004, .07 * v, .16)); break;
-      case 'splatted': this.noise('lowpass', 900, 80, 1, t, .004, .6 * v, .6); this.osc('sawtooth', 220, 55, t, .01, .12 * v, .7); break;
+      case 'splatted': this.noise('lowpass', 900, 80, 1, t, .004, .6 * v, .5); [[311, .0], [294, .28], [277, .56]].forEach(([f, d]) => this.osc('sawtooth', f, f * .98, t + .25 + d, .02, .07 * v, .24)); this.osc('sawtooth', 262, 196, t + 1.09, .02, .08 * v, .75); break;
+      case 'boing': this.osc('sine', 180 * p, 520 * p, t, .005, .14 * v, .18, undefined, pan); this.osc('triangle', 520 * p, 260 * p, t + .12, .005, .06 * v, .2, undefined, pan); break;
       case 'dive': this.noise('bandpass', 500, 2600, 1.4, t, .03, .32 * v, .24, undefined, pan); break;
       case 'dodge': this.noise('highpass', 3000, 6000, .8, t, .01, .18 * v, .14); this.osc('sine', 1480, 1980, t, .003, .05 * v, .12); break;
       case 'slide': this.noise('lowpass', 1400, 500, .7, t, .05, .26 * v, .55, undefined, pan); break;
