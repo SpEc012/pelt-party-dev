@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3 — October 6, 2026
+
+- Fixed legs bending sideways after respawning from a ragdoll (leftover knee twist); every joint the ragdoll touched is reset.
+- Ragdoll feels less like jelly: muscle tone (slightly bent arms, legs under the hips, firmer neck), more solver iterations, more damping and a gentler launch.
+
+
 ## 1.1.2 — October 6, 2026
 
 - Articulated ragdoll: 15 Verlet joint particles (pelvis, neck, head, shoulders, elbows, hands, hips, knees, feet) with bone constraints, a rigid torso, a floppy neck and elbow/knee fold limits; each particle collides with the ground and slides with friction. The rig's real joints are rotated every frame to follow the simulation, so every limb flops independently. Throws and Big Pelt splashes knock nearby ragdolls around.

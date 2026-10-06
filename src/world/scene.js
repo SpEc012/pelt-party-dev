@@ -153,7 +153,7 @@ export class World {
   makeRag(a,pose,from,settled=false){
     let dx=0,dz=0;if(from){dx=pose.x-from.x;dz=pose.z-from.z;}const d=Math.hypot(dx,dz);if(d>.01){dx/=d;dz/=d;}else{dx=-Math.sin(a.facing);dz=-Math.cos(a.facing);}
     const r=a.rig.root;if(!a.rag){r.position.set(pose.x,0,pose.z);r.rotation.set(0,a.facing,0,'YXZ');}
-    const rag=new Ragdoll(a.rig,{dir:{x:dx,z:dz},push:2.4+Math.random()*1.8,up:4+Math.random()*2.2,spin:(5+Math.random()*5)*(Math.random()<.8?1:-1)});
+    const rag=new Ragdoll(a.rig,{dir:{x:dx,z:dz},push:2.6+Math.random()*1.6,up:3.4+Math.random()*1.6,spin:(3+Math.random()*3)*(Math.random()<.8?1:-1)});
     rag.nextStar=0;if(settled){for(let i=0;i<600&&!rag.asleep;i++)rag.step();rag.thump=0;rag.landed=true;}return rag;
   }
   ragdoll(slot,pose,from){const a=this.actors.get(slot);if(a)a.rag=this.makeRag(a,pose,from);}
@@ -263,7 +263,7 @@ export class World {
         const speed=Math.hypot(pose.vx||0,pose.vz||0),flags=pose.flags??0;
         const dead=!!(p.respawnAt||flags&2);
         if(dead){a.rag??=this.makeRag(a,pose,null,true);this.stepRag(a,dt);}
-        else{if(a.rag)a.rag=null;r.position.set(pose.x,0,pose.z);const face=(flags&1||flags&8)&&speed>1?Math.atan2(pose.vx,pose.vz):pose.facing||0;const delta=Math.atan2(Math.sin(face-a.facing),Math.cos(face-a.facing));a.facing+=delta*Math.min(1,dt*20);r.rotation.set(0,a.facing,0,'YXZ');}
+        else{if(a.rag){a.rag.release();a.rag=null;r.quaternion.identity();}r.position.set(pose.x,0,pose.z);const face=(flags&1||flags&8)&&speed>1?Math.atan2(pose.vx,pose.vz):pose.facing||0;const delta=Math.atan2(Math.sin(face-a.facing),Math.cos(face-a.facing));a.facing+=delta*Math.min(1,dt*20);r.rotation.set(0,a.facing,0,'YXZ');}
         const px=dead?a.rag.center.x:pose.x,pz=dead?a.rag.center.z:pose.z,dist=Math.hypot(px-camX,pz-camZ);_sphere.center.set(px,1,pz);_sphere.radius=1.6;const visible=this.frustum.intersectsSphere(_sphere);
         const tier=p.slot===mySlot||dist<full?-1:dist<lod0?0:1;
         let anim='idle';
