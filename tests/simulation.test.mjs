@@ -2,6 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Room} from '../shared/room.mjs';
 import {encodeWorld} from '../shared/protocol.mjs';
+import {cameraBasis, relativeMove, driveVelocity, cameraClearance} from '../shared/controller.mjs';
+import {moveBody, coverContact, makePelt, peltAt} from '../shared/physics.mjs';
+
+
+test('third-person controller stays camera-relative and accelerates smoothly',()=>{
+ const b=cameraBasis(Math.PI/2);assert.deepEqual({fx:Math.round(b.fx),fz:Math.round(b.fz)},{fx:1,fz:0});
+ const right=relativeMove(1,0,Math.PI/2);assert.ok(Math.abs(right.x)<.01&&right.z>.99);
+ let body={vx:0,vz:0};body=driveVelocity(body,{x:0,z:1},1/60);assert.ok(body.vz>.8&&body.vx===0);const stopped=driveVelocity(body,{x:0,z:0},1/60);assert.ok(stopped.vz<body.vz);
+});
+test('camera clips behind finite cover and pelts respect cover height',()=>{
+ const cover=[{x:0,z:0,r:1,h:1.5}];const clipped=cameraClearance({x:0,y:1,z:3},{x:0,y:1,z:-3},cover);assert.ok(clipped.z>-.8);
+ assert.equal(coverContact({x:0,y:1.1,z:3},{x:0,y:1.1,z:-3},cover[0])!==null,true);assert.equal(coverContact({x:0,y:2,z:3},{x:0,y:2,z:-3},cover[0]),null);
+ const shot=makePelt('t',0,{x:-6,y:1.1,z:0},{x:6,y:1.1,z:0},false,0);assert.ok(peltAt(shot,shot.release+shot.T*1000).x>5.5);
+});
 
 function rng(seed){let s=seed;return()=>((s=Math.imul(s,1664525)+1013904223)>>>0)/4294967296;}
 test('independent replicas receive matching results over delayed ordered events and recover from a disconnect',()=>{

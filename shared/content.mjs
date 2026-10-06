@@ -1,7 +1,7 @@
-export const BUILD = '0.1.0';
+export const BUILD = '0.2.0';
 export const TITLE = 'Pelt Party';
 export const SEASONS = {
-  halloween: { name: 'Pumpkin Panic', label: 'HALLOWEEN EDITION', pelt: 'pumpkins', ground: '#58664d', sky: '#44334f', fog: '#69576b', accent: '#ffa54d', tree: '#c77545' },
+  halloween: { name: 'Pumpkin Panic', label: 'HALLOWEEN EDITION', pelt: 'pumpkins', ground: '#839675', sky: '#484a76', fog: '#9296b2', accent: '#ffa54d', tree: '#c77545' },
   harvest: { name: 'Leaf Fort Frenzy', label: 'HARVEST EDITION', pelt: 'leaf balls', ground: '#b0985f', sky: '#c7aa8c', fog: '#ccb58d', accent: '#f2ba59', tree: '#cb6c3c' },
   frost: { name: 'Snowball Showdown', label: 'FROST EDITION', pelt: 'snowballs', ground: '#d9e8ee', sky: '#91aec9', fog: '#b4ccde', accent: '#b6eafa', tree: '#477d79' },
   meadow: { name: 'Meadow Mischief', label: 'MEADOW EDITION', pelt: 'flower puffs', ground: '#82a56b', sky: '#a8d1cc', fog: '#bcd0ae', accent: '#f4d37c', tree: '#73a16a' }
@@ -36,6 +36,7 @@ export function makeMap(id = 'patch', count = 8) {
     props.push({ x: sign * (7 + i * 4) * scale, z: (i % 2 ? -5 : 5) * scale, r: 1.15, h: .85, kind: id === 'hollow' ? 'stone' : 'hay' });
     props.push({ x: sign * (6 + i * 5) * scale, z: (i % 2 ? 10 : -10) * scale, r: .7, h: 2.3, kind: 'tree' });
   }
+  for(const sign of [-1,1])for(const z of [-3.5,7])props.push({x:sign*11*scale,z:z*scale,r:1.05,h:1.55,kind:'bunker',team:sign<0?0:1});
   const piles = [[-17,-9],[-17,9],[17,-9],[17,9],[0,-11],[0,11]].map(([x,z],i)=>({id:i,x:x*scale,z:z*scale}));
   if(count>18) piles.push({id:6,x:-10*scale,z:0},{id:7,x:10*scale,z:0});
   const pads = [[-9,0],[9,0],[0,-6],[0,6]].map(([x,z],id)=>({id,x:x*scale,z:z*scale}));
@@ -43,5 +44,5 @@ export function makeMap(id = 'patch', count = 8) {
 }
 export function spawnPoint(slot, map) {
   const side = slot % 2 ? 1 : -1, row = Math.floor(slot / 2);
-  return { x: side * (map.width / 2 - 3), z: -map.depth / 2 + 3 + row * (map.depth - 6) / 9 };
+  return { x: side * (map.width / 2 - 3), z: ((row%5)-2)*((map.depth-8)/5)+(row>=5?1.8:0) };
 }

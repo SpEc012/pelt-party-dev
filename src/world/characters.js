@@ -4,6 +4,7 @@ import {STATES} from './chars/chibi-anim.mjs';
 import {EYE,MOUTH} from './chars/face.mjs';
 
 // Extend the supplied pose table; keep the original model proportions and rig.
+STATES.crouch=(p,t)=>{STATES.idle(p,t);p.lLeg=p.rLeg=.8;p.lKnee=p.rKnee=1.3;p.spineRx=.22;p.hipY=-.12;};
 STATES.throw=(p,t)=>{STATES.idle(p,t);const u=Math.min(1,t/.32);p.rFwd=u<.38?-.9:1.8*(1-u);p.rElbow=.6;p.spineRy=Math.sin(u*Math.PI)*-.3;p.eyes=EYE.SQUINT;};
 STATES.charge=(p,t)=>{STATES.idle(p,t);p.rFwd=-.8;p.rElbow=1.6;p.hipY=-.045;p.spineRx=.15;p.mouth=MOUTH.O;};
 STATES.roll=(p,t)=>{STATES.idle(p,t);p.bodyRx=-Math.min(1,t/.28)*Math.PI*2;p.bodyY=.25;p.lLeg=p.rLeg=1;p.lKnee=p.rKnee=1.8;p.lFwd=p.rFwd=1.5;};
